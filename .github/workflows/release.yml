@@ -137,8 +137,10 @@ jobs:
             -C dxc-source/cmake/caches/PredefinedParams.cmake \
             -DCMAKE_BUILD_TYPE=MinSizeRel \
             -DHLSL_COPY_GENERATED_SOURCES=OFF \
+            -DHLSL_INCLUDE_TESTS=OFF \
             -DLLVM_INCLUDE_TESTS=OFF \
             -DCLANG_INCLUDE_TESTS=OFF \
+            -DSPIRV_BUILD_TESTS=OFF \
             -DLLVM_ENABLE_WARNINGS=OFF \
             "${extra_arguments[@]}"
 
