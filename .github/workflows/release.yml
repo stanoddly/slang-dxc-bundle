@@ -119,7 +119,11 @@ jobs:
           generator_arguments=(-G Ninja)
           extra_arguments=()
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            generator_arguments=(-G "Visual Studio 17 2022" -A x64)
+            if cmake --help | grep -q "Visual Studio 18 2026"; then
+              generator_arguments=(-G "Visual Studio 18 2026" -A x64)
+            else
+              generator_arguments=(-G "Visual Studio 17 2022" -A x64)
+            fi
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             clang_major=$(clang --version | sed -n 's/.*clang version \([0-9][0-9]*\).*/\1/p' | head -1)
             if [[ -n "$clang_major" && "$clang_major" -ge 21 ]]; then
