@@ -1,0 +1,216 @@
+name: Release Slang with DXC
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      slang_tag:
+        description: Slang release tag; leave empty for the latest stable release
+        required: false
+        type: string
+  repository_dispatch:
+    types: [slang-release]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: slang-dxc-release
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_build: ${{ steps.release.outputs.should_build }}
+      slang_tag: ${{ steps.release.outputs.slang_tag }}
+      slang_version: ${{ steps.release.outputs.slang_version }}
+      dxc_tag: ${{ steps.release.outputs.dxc_tag }}
+      dxc_version: ${{ steps.release.outputs.dxc_version }}
+      dxc_commit: ${{ steps.release.outputs.dxc_commit }}
+      bundle_tag: ${{ steps.release.outputs.bundle_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve upstream releases
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MANUAL_SLANG_TAG: ${{ inputs.slang_tag }}
+          DISPATCH_SLANG_TAG: ${{ github.event.client_payload.slang_tag }}
+        run: |
+          slang_tag="${MANUAL_SLANG_TAG:-$DISPATCH_SLANG_TAG}"
+          arguments=(--repository "$GITHUB_REPOSITORY")
+          if [[ -n "$slang_tag" ]]; then
+            arguments+=(--slang-tag "$slang_tag")
+          fi
+          python3 scripts/resolve_release.py "${arguments[@]}"
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.should_build == 'true'
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: windows-2025
+            slang_asset_platform: windows-x86_64
+            dxcompiler: dxc-build/bin/dxcompiler.dll
+            slangc: bin/slangc.exe
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+            slang_asset_platform: linux-x86_64
+            dxcompiler: dxc-build/lib/libdxcompiler.so
+            slangc: bin/slangc
+          - platform: linux-aarch64
+            runner: ubuntu-22.04-arm
+            slang_asset_platform: linux-aarch64
+            dxcompiler: dxc-build/lib/libdxcompiler.so
+            slangc: bin/slangc
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            slang_asset_platform: macos-x86_64
+            dxcompiler: dxc-build/lib/libdxcompiler.dylib
+            slangc: bin/slangc
+          - platform: macos-aarch64
+            runner: macos-15
+            slang_asset_platform: macos-aarch64
+            dxcompiler: dxc-build/lib/libdxcompiler.dylib
+            slangc: bin/slangc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out DXC source
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/DirectXShaderCompiler
+          ref: ${{ needs.resolve.outputs.dxc_commit }}
+          path: dxc-source
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Verify DXC revision
+        shell: bash
+        env:
+          EXPECTED_DXC_COMMIT: ${{ needs.resolve.outputs.dxc_commit }}
+        run: |
+          actual_commit=$(git -C dxc-source rev-parse HEAD)
+          if [[ "$actual_commit" != "$EXPECTED_DXC_COMMIT" ]]; then
+            echo "Expected DXC $EXPECTED_DXC_COMMIT, got $actual_commit" >&2
+            exit 1
+          fi
+
+      - name: Configure DXC
+        shell: bash
+        run: |
+          extra_arguments=()
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            clang_major=$(clang --version | sed -n 's/.*clang version \([0-9][0-9]*\).*/\1/p' | head -1)
+            if [[ -n "$clang_major" && "$clang_major" -ge 21 ]]; then
+              extra_arguments+=("-DCMAKE_CXX_FLAGS=-Wno-invalid-specialization")
+            fi
+          fi
+          cmake \
+            -G Ninja \
+            -B dxc-build \
+            -S dxc-source \
+            -C dxc-source/cmake/caches/PredefinedParams.cmake \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DHLSL_COPY_GENERATED_SOURCES=OFF \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DCLANG_INCLUDE_TESTS=OFF \
+            -DLLVM_ENABLE_WARNINGS=OFF \
+            "${extra_arguments[@]}"
+
+      - name: Build DXC library
+        shell: bash
+        run: cmake --build dxc-build --target dxcompiler --parallel
+
+      - name: Package bundle
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLANG_TAG: ${{ needs.resolve.outputs.slang_tag }}
+          SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
+          DXC_TAG: ${{ needs.resolve.outputs.dxc_tag }}
+          DXC_COMMIT: ${{ needs.resolve.outputs.dxc_commit }}
+        run: |
+          python3 scripts/package_bundle.py \
+            --slang-tag "$SLANG_TAG" \
+            --slang-version "$SLANG_VERSION" \
+            --dxc-tag "$DXC_TAG" \
+            --dxc-commit "$DXC_COMMIT" \
+            --platform "${{ matrix.platform }}" \
+            --slang-asset "slang-${SLANG_VERSION}-${{ matrix.slang_asset_platform }}.zip" \
+            --dxcompiler "${{ matrix.dxcompiler }}" \
+            --dxc-source dxc-source \
+            --output-directory dist
+
+      - name: Smoke-test DXIL compilation
+        shell: bash
+        run: |
+          bundle=$(find dist -maxdepth 1 -name '*.zip' -print -quit)
+          mkdir smoke
+          cd smoke
+          cmake -E tar xvf "../$bundle"
+          "./${{ matrix.slangc }}" \
+            ../tests/smoke.slang \
+            -target dxil \
+            -profile sm_6_0 \
+            -entry main \
+            -o smoke.dxil
+          test -s smoke.dxil
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [resolve, build]
+    if: needs.resolve.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "*"
+          merge-multiple: true
+
+      - name: Create release notes
+        env:
+          SLANG_TAG: ${{ needs.resolve.outputs.slang_tag }}
+          DXC_TAG: ${{ needs.resolve.outputs.dxc_tag }}
+          DXC_COMMIT: ${{ needs.resolve.outputs.dxc_commit }}
+        run: |
+          cat > release-notes.md <<EOF
+          Unofficial Slang distribution bundles with source-built DXC support.
+
+          - Slang: [${SLANG_TAG}](https://github.com/shader-slang/slang/releases/tag/${SLANG_TAG})
+          - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
+          - DXC commit: \`${DXC_COMMIT}\`
+
+          Each archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every bundle passed a native DXIL Shader Model 6.0 compilation smoke test.
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+        run: |
+          gh release create "$BUNDLE_TAG" \
+            dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$BUNDLE_TAG" \
+            --notes-file release-notes.md \
+            --latest
