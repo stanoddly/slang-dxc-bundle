@@ -36,3 +36,11 @@ GitHub cannot subscribe directly to another repository's `release` event. The sc
 ## Licensing
 
 The scripts and workflows in this repository use the repository's [MIT license](LICENSE). Released archives contain software from Slang, DXC, and their dependencies under their respective licenses. Their license material is preserved inside each archive.
+
+### Why DXC is built from source
+
+This repository intentionally does not copy DXC libraries from Microsoft's prebuilt release archives. In the [DXC v1.9.2602 release](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.9.2602), both the Windows and Linux archives contain `LICENSE-MS.txt`. Those binary-release terms limit installation and use to Windows and describe redistribution as distributable code included in applications that add significant primary functionality. The presence of those terms in the Linux archive is unclear, and a standalone compiler bundle does not fit that redistribution model cleanly. This project does not attempt to reinterpret that ambiguity.
+
+Instead, the workflow builds `dxcompiler` from the exact DXC source commit pinned by Slang. That [source tree](https://github.com/microsoft/DirectXShaderCompiler/tree/21d28f727ad395b59394815ef76012e432f7e4e5) contains the permissive [`LICENSE.TXT`](https://github.com/microsoft/DirectXShaderCompiler/blob/21d28f727ad395b59394815ef76012e432f7e4e5/LICENSE.TXT) and [`ThirdPartyNotices.txt`](https://github.com/microsoft/DirectXShaderCompiler/blob/21d28f727ad395b59394815ef76012e432f7e4e5/ThirdPartyNotices.txt), but not `LICENSE-MS.txt`. The released bundles reproduce those source license materials alongside the resulting library. This gives every supported platform the same auditable source and licensing provenance without republishing Microsoft's prebuilt binaries.
+
+This is a conservative project packaging policy, not legal advice.
