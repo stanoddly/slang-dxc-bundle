@@ -58,7 +58,7 @@ jobs:
           - platform: windows-x86_64
             runner: windows-2025
             slang_asset_platform: windows-x86_64
-            dxcompiler: dxc-build/bin/dxcompiler.dll
+            dxcompiler: dxc-build/MinSizeRel/bin/dxcompiler.dll
             slangc: bin/slangc.exe
           - platform: linux-x86_64
             runner: ubuntu-22.04
@@ -108,15 +108,18 @@ jobs:
       - name: Configure DXC
         shell: bash
         run: |
+          generator_arguments=(-G Ninja)
           extra_arguments=()
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            generator_arguments=(-G "Visual Studio 17 2022" -A x64)
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
             clang_major=$(clang --version | sed -n 's/.*clang version \([0-9][0-9]*\).*/\1/p' | head -1)
             if [[ -n "$clang_major" && "$clang_major" -ge 21 ]]; then
               extra_arguments+=("-DCMAKE_CXX_FLAGS=-Wno-invalid-specialization")
             fi
           fi
           cmake \
-            -G Ninja \
+            "${generator_arguments[@]}" \
             -B dxc-build \
             -S dxc-source \
             -C dxc-source/cmake/caches/PredefinedParams.cmake \
@@ -129,7 +132,7 @@ jobs:
 
       - name: Build DXC library
         shell: bash
-        run: cmake --build dxc-build --target dxcompiler --parallel
+        run: cmake --build dxc-build --config MinSizeRel --target dxcompiler --parallel
 
       - name: Package bundle
         shell: bash
