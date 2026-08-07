@@ -105,7 +105,15 @@ jobs:
             exit 1
           fi
 
+      - name: Restore DXC library
+        id: dxc-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ matrix.dxcompiler }}
+          key: dxc-library-v1-${{ matrix.platform }}-${{ needs.resolve.outputs.dxc_commit }}
+
       - name: Configure DXC
+        if: steps.dxc-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           generator_arguments=(-G Ninja)
@@ -131,6 +139,7 @@ jobs:
             "${extra_arguments[@]}"
 
       - name: Build DXC library
+        if: steps.dxc-cache.outputs.cache-hit != 'true'
         shell: bash
         run: cmake --build dxc-build --config MinSizeRel --target dxcompiler --parallel
 
