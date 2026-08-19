@@ -337,7 +337,7 @@ jobs:
           name: toolchain-${{ matrix.platform }}
           path: dist/*.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   assemble-package:
     needs: [resolve, toolchain]
