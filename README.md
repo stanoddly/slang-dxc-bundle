@@ -25,6 +25,16 @@ Releases are named `slang-<Slang version>-dxc-<DXC version>`. Every bundle conta
 
 Each release also provides a `.sha256` file for every archive.
 
+## NuGet toolchain package
+
+`Stanoddly.SlangDxc.Toolchain` provides the slim build-host tool trees through NuGet restore. One package contains Linux x64/ARM64, Windows x64, and macOS x64/ARM64 under `tools/slang/{platform}`.
+
+The package is passive. Its only build integration is the transitive MSBuild property `SlangDxcToolchainRoot`, which points to the common `tools/slang/` directory. Downstream integrations select and execute the appropriate build-host compiler independently of the application's target runtime identifier.
+
+Package versions initially match their Slang version. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections.
+
+NuGet publication uses trusted publishing. The nuget.org policy must authorize the `stanoddly/slang-dxc-bundle` repository and the `release.yml` workflow before the first package is published.
+
 ## Automation
 
 [`release.yml`](.github/workflows/release.yml) checks the latest stable Slang release every six hours. If its corresponding bundle release does not exist, the workflow builds and tests all supported platforms before publishing it.

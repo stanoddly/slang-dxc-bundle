@@ -10,7 +10,16 @@ import urllib.request
 
 
 GITHUB_API_URL = "https://api.github.com"
+NUGET_FLAT_CONTAINER_URL = "https://api.nuget.org/v3-flatcontainer"
+TOOLCHAIN_PACKAGE_ID = "Stanoddly.SlangDxc.Toolchain"
 SLANG_REPOSITORY = "shader-slang/slang"
+PLATFORMS = (
+    "windows-x86_64",
+    "linux-x86_64",
+    "linux-aarch64",
+    "macos-x86_64",
+    "macos-aarch64",
+)
 
 
 def request_json(url: str, token: str) -> dict:
@@ -45,15 +54,28 @@ def extract_cmake_value(source: str, variable: str) -> str:
     return match.group(1)
 
 
-def release_exists(repository: str, tag: str, token: str) -> bool:
+def get_release(repository: str, tag: str, token: str) -> dict | None:
     url = f"{GITHUB_API_URL}/repos/{repository}/releases/tags/{tag}"
     try:
-        request_json(url, token)
-        return True
+        return request_json(url, token)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+
+
+def nuget_package_exists(package_id: str, version: str) -> bool:
+    package_id_lower = package_id.lower()
+    url = f"{NUGET_FLAT_CONTAINER_URL}/{package_id_lower}/index.json"
+    try:
+        response = request_json(url, "")
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return False
         raise
+
+    versions = {str(value).lower() for value in response.get("versions", [])}
+    return version.lower() in versions
 
 
 def write_output(name: str, value: str) -> None:
@@ -101,24 +123,64 @@ def main() -> int:
     dxc_version = dxc_tag.removeprefix("v")
     bundle_tag = f"slang-{slang_version}-dxc-{dxc_version}"
 
-    expected_assets = {
-        f"slang-{slang_version}-windows-x86_64.zip",
-        f"slang-{slang_version}-linux-x86_64.zip",
-        f"slang-{slang_version}-linux-aarch64.zip",
-        f"slang-{slang_version}-macos-x86_64.zip",
-        f"slang-{slang_version}-macos-aarch64.zip",
+    expected_upstream_assets = {
+        f"slang-{slang_version}-{platform}.zip" for platform in PLATFORMS
     }
     release_assets = {asset["name"] for asset in slang_release["assets"]}
-    missing_assets = sorted(expected_assets - release_assets)
+    missing_assets = sorted(expected_upstream_assets - release_assets)
     if missing_assets:
         raise RuntimeError(
             f"Slang release {slang_tag} is missing required assets: "
             + ", ".join(missing_assets)
         )
 
-    should_build = not release_exists(arguments.repository, bundle_tag, arguments.token)
+    bundle_release = get_release(arguments.repository, bundle_tag, arguments.token)
+    bundle_release_exists = bundle_release is not None
+    expected_bundle_assets = {
+        name
+        for platform in PLATFORMS
+        for name in (
+            f"{bundle_tag}-{platform}.zip",
+            f"{bundle_tag}-{platform}.zip.sha256",
+        )
+    }
+    bundle_assets = (
+        {asset["name"] for asset in bundle_release["assets"]}
+        if bundle_release is not None
+        else set()
+    )
+    if bundle_release_exists:
+        missing_bundle_assets = sorted(expected_bundle_assets - bundle_assets)
+        if missing_bundle_assets:
+            raise RuntimeError(
+                f"Bundle release {bundle_tag} is incomplete: "
+                + ", ".join(missing_bundle_assets)
+            )
 
-    write_output("should_build", str(should_build).lower())
+    toolchain_package_version = slang_version
+    expected_toolchain_assets = {
+        name
+        for platform in PLATFORMS
+        for name in (
+            f"{bundle_tag}-toolchain-{platform}.zip",
+            f"{bundle_tag}-toolchain-{platform}.zip.sha256",
+        )
+    }
+    toolchain_assets_complete = expected_toolchain_assets <= bundle_assets
+    toolchain_package_exists = nuget_package_exists(
+        TOOLCHAIN_PACKAGE_ID,
+        toolchain_package_version,
+    )
+    should_build_bundle = not bundle_release_exists
+    should_prepare_toolchain = (
+        not toolchain_assets_complete or not toolchain_package_exists
+    )
+
+    write_output("should_build_bundle", str(should_build_bundle).lower())
+    write_output("should_prepare_toolchain", str(should_prepare_toolchain).lower())
+    write_output("toolchain_assets_complete", str(toolchain_assets_complete).lower())
+    write_output("toolchain_package_exists", str(toolchain_package_exists).lower())
+    write_output("toolchain_package_version", toolchain_package_version)
     write_output("slang_tag", slang_tag)
     write_output("slang_version", slang_version)
     write_output("dxc_tag", dxc_tag)
@@ -129,7 +191,11 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "should_build": should_build,
+                "should_build_bundle": should_build_bundle,
+                "should_prepare_toolchain": should_prepare_toolchain,
+                "toolchain_assets_complete": toolchain_assets_complete,
+                "toolchain_package_exists": toolchain_package_exists,
+                "toolchain_package_version": toolchain_package_version,
                 "slang_tag": slang_tag,
                 "dxc_tag": dxc_tag,
                 "dxc_commit": dxc_commit,
