@@ -183,9 +183,6 @@ def main() -> int:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         )
 
-    bundle_digest = sha256_file(bundle_path)
-    checksum_path = bundle_path.with_suffix(bundle_path.suffix + ".sha256")
-    checksum_path.write_text(f"{bundle_digest}  {bundle_path.name}\n", encoding="utf-8")
     print(bundle_path)
     return 0
 

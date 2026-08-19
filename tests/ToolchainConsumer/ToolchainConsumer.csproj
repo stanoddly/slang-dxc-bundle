@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <SlangPlatform Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">linux-x86_64</SlangPlatform>
+        <SlangPlatform Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">linux-aarch64</SlangPlatform>
+        <SlangPlatform Condition="$([MSBuild]::IsOSPlatform('Windows')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">windows-x86_64</SlangPlatform>
+        <SlangPlatform Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">macos-x86_64</SlangPlatform>
+        <SlangPlatform Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">macos-aarch64</SlangPlatform>
+        <SlangCompilerName Condition="$([MSBuild]::IsOSPlatform('Windows'))">slangc.exe</SlangCompilerName>
+        <SlangCompilerName Condition="'$(SlangCompilerName)' == ''">slangc</SlangCompilerName>
+        <SlangCompilerPath>$(SlangDxcToolchainRoot)$(SlangPlatform)/bin/$(SlangCompilerName)</SlangCompilerPath>
+        <SmokeShader>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'smoke.slang'))</SmokeShader>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="SlangDxcBundle.Toolchain.ConsumerTest.Dependency"
+                          Version="[1.0.0]" />
+    </ItemGroup>
+
+    <Target Name="CompileToolchainSmokeShaders"
+            AfterTargets="Build"
+            Condition="'$(RunToolchainSmoke)' != 'false'">
+        <PropertyGroup>
+            <SmokeOutputDirectory>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', 'toolchain-smoke'))</SmokeOutputDirectory>
+        </PropertyGroup>
+        <Error Text="The toolchain package did not expose SlangDxcToolchainRoot."
+               Condition="'$(SlangDxcToolchainRoot)' == ''" />
+        <Error Text="Unsupported build host for the toolchain consumer test."
+               Condition="'$(SlangPlatform)' == ''" />
+        <Error Text="Expected build-host platform $(ExpectedSlangPlatform), got $(SlangPlatform)."
+               Condition="'$(ExpectedSlangPlatform)' != '' And '$(ExpectedSlangPlatform)' != '$(SlangPlatform)'" />
+        <Error Text="Slang compiler does not exist: $(SlangCompilerPath)"
+               Condition="!Exists('$(SlangCompilerPath)')" />
+        <MakeDir Directories="$(SmokeOutputDirectory)" />
+        <Exec Command="&quot;$(SlangCompilerPath)&quot; &quot;$(SmokeShader)&quot; -target spirv -profile sm_6_0 -entry main -o &quot;$(SmokeOutputDirectory)smoke.spirv&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+        <Exec Command="&quot;$(SlangCompilerPath)&quot; &quot;$(SmokeShader)&quot; -target dxil -profile sm_6_0 -entry main -o &quot;$(SmokeOutputDirectory)smoke.dxil&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+        <Exec Command="&quot;$(SlangCompilerPath)&quot; &quot;$(SmokeShader)&quot; -target metal -profile sm_6_0 -entry main -o &quot;$(SmokeOutputDirectory)smoke.metal&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+        <Error Text="SPIR-V smoke output was not generated."
+               Condition="!Exists('$(SmokeOutputDirectory)smoke.spirv')" />
+        <Error Text="DXIL smoke output was not generated."
+               Condition="!Exists('$(SmokeOutputDirectory)smoke.dxil')" />
+        <Error Text="Metal smoke output was not generated."
+               Condition="!Exists('$(SmokeOutputDirectory)smoke.metal')" />
+    </Target>
+
+</Project>

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultItems>false</EnableDefaultItems>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <IsPackable>true</IsPackable>
+        <PackageId>SlangDxcBundle.Toolchain</PackageId>
+        <Title>Unofficial Slang/DXC Toolchain Bundle</Title>
+        <PackageVersion Condition="'$(PackageVersion)' == ''">0.0.0-local</PackageVersion>
+        <Authors>stanoddly</Authors>
+        <Description>Unofficial cross-platform Slang compiler build-host tooling with source-built DXC support.</Description>
+        <PackageLicenseFile>PACKAGE-LICENSE.txt</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <PackageTags>slang;dxc;shader;compiler;build;unofficial</PackageTags>
+        <PackageProjectUrl>https://github.com/stanoddly/slang-dxc-bundle</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/stanoddly/slang-dxc-bundle</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <MinClientVersion>5.0.0</MinClientVersion>
+        <ToolchainInputDirectory Condition="'$(ToolchainInputDirectory)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'build', 'toolchain-package', 'tools', 'slang'))</ToolchainInputDirectory>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="buildTransitive\SlangDxcBundle.Toolchain.props"
+              Pack="true"
+              PackagePath="buildTransitive" />
+        <None Include="README.md" Pack="true" PackagePath="\" />
+        <None Include="PACKAGE-LICENSE.txt" Pack="true" PackagePath="\" />
+        <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+        <_ToolchainFile Include="$(ToolchainInputDirectory)**\*" />
+        <None Include="$(ToolchainInputDirectory)**\*"
+              Pack="true"
+              PackagePath="tools\slang" />
+    </ItemGroup>
+
+    <Target Name="ValidateToolchainPackageInputs" BeforeTargets="GenerateNuspec">
+        <Error Text="Toolchain input directory does not exist: $(ToolchainInputDirectory)"
+               Condition="!Exists('$(ToolchainInputDirectory)')" />
+        <Error Text="Toolchain input directory is empty: $(ToolchainInputDirectory)"
+               Condition="'@(_ToolchainFile)' == ''" />
+    </Target>
+
+</Project>

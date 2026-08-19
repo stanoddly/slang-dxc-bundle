@@ -13,7 +13,7 @@ on:
     types: [slang-release]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: slang-dxc-release
@@ -23,7 +23,10 @@ jobs:
   resolve:
     runs-on: ubuntu-24.04
     outputs:
-      should_build: ${{ steps.release.outputs.should_build }}
+      should_build_bundle: ${{ steps.release.outputs.should_build_bundle }}
+      should_prepare_toolchain: ${{ steps.release.outputs.should_prepare_toolchain }}
+      toolchain_package_exists: ${{ steps.release.outputs.toolchain_package_exists }}
+      toolchain_package_version: ${{ steps.release.outputs.toolchain_package_version }}
       slang_tag: ${{ steps.release.outputs.slang_tag }}
       slang_version: ${{ steps.release.outputs.slang_version }}
       dxc_tag: ${{ steps.release.outputs.dxc_tag }}
@@ -49,8 +52,8 @@ jobs:
 
   build:
     needs: resolve
-    if: needs.resolve.outputs.should_build == 'true'
-    name: ${{ matrix.platform }}
+    if: needs.resolve.outputs.should_build_bundle == 'true'
+    name: Build ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -187,22 +190,22 @@ jobs:
       - name: Upload bundle
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.platform }}
-          path: |
-            dist/*.zip
-            dist/*.sha256
+          name: bundle-${{ matrix.platform }}
+          path: dist/*.zip
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  publish-bundle:
     needs: [resolve, build]
-    if: needs.resolve.outputs.should_build == 'true'
+    if: needs.resolve.outputs.should_build_bundle == 'true'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: "*"
+          pattern: bundle-*
           merge-multiple: true
 
       - name: Create release notes
@@ -218,17 +221,362 @@ jobs:
           - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
           - DXC commit: \`${DXC_COMMIT}\`
 
-          Each archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every bundle passed a native DXIL Shader Model 6.0 compilation smoke test.
+          Each full archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every full archive passed a native DXIL Shader Model 6.0 compilation smoke test.
           EOF
 
-      - name: Publish release
+      - name: Publish full release
         env:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
         run: |
           gh release create "$BUNDLE_TAG" \
-            dist/* \
+            dist/*.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "$BUNDLE_TAG" \
             --notes-file release-notes.md \
+            --target "$GITHUB_SHA" \
             --latest
+
+  toolchain:
+    needs: [resolve, publish-bundle]
+    if: >-
+      always() &&
+      needs.resolve.result == 'success' &&
+      needs.resolve.outputs.should_prepare_toolchain == 'true' &&
+      (
+        (needs.resolve.outputs.should_build_bundle == 'true' && needs.publish-bundle.result == 'success') ||
+        (needs.resolve.outputs.should_build_bundle != 'true' && needs.publish-bundle.result == 'skipped')
+      )
+    name: Toolchain ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: windows-2025
+            slangc: bin/slangc.exe
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+            slangc: bin/slangc
+          - platform: linux-aarch64
+            runner: ubuntu-22.04-arm
+            slangc: bin/slangc
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            slangc: bin/slangc
+          - platform: macos-aarch64
+            runner: macos-15
+            slangc: bin/slangc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download full bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+        run: |
+          mkdir source
+          gh release download "$BUNDLE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BUNDLE_TAG-${{ matrix.platform }}.zip" \
+            --dir source
+
+      - name: Package slim toolchain
+        shell: bash
+        env:
+          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+          SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
+        run: |
+          python3 scripts/package_toolchain.py \
+            --bundle "source/$BUNDLE_TAG-${{ matrix.platform }}.zip" \
+            --slang-version "$SLANG_VERSION" \
+            --platform "${{ matrix.platform }}" \
+            --output-directory dist
+
+      - name: Extract slim toolchain
+        shell: bash
+        env:
+          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+        run: |
+          archive="$GITHUB_WORKSPACE/dist/$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip"
+          mkdir -p smoke/toolchain smoke/work
+          (
+            cd smoke/toolchain
+            cmake -E tar xvf "$archive"
+          )
+
+      - name: Make toolchain read-only
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod -R a-w smoke/toolchain
+
+      - name: Smoke-test slim toolchain
+        shell: bash
+        run: |
+          cd smoke/work
+          for target in spirv dxil metal; do
+            "../toolchain/${{ matrix.slangc }}" \
+              ../../tests/smoke.slang \
+              -target "$target" \
+              -profile sm_6_0 \
+              -entry main \
+              -o "smoke.$target"
+            test -s "smoke.$target"
+          done
+          if find ../toolchain -name slang-glsl-module.bin -print -quit | grep -q .; then
+            echo "Slang mutated the slim toolchain installation" >&2
+            exit 1
+          fi
+
+      - name: Upload slim toolchain artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: toolchain-${{ matrix.platform }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  assemble-package:
+    needs: [resolve, toolchain]
+    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download slim toolchains
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/toolchain-archives
+          pattern: toolchain-*
+          merge-multiple: true
+
+      - name: Stage expanded toolchains
+        shell: bash
+        run: |
+          for archive in artifacts/toolchain-archives/*-toolchain-*.zip; do
+            platform="${archive##*-toolchain-}"
+            platform="${platform%.zip}"
+            destination="artifacts/toolchain-package/tools/slang/$platform"
+            archive_path="$GITHUB_WORKSPACE/$archive"
+            mkdir -p "$destination"
+            (
+              cd "$destination"
+              cmake -E tar xvf "$archive_path"
+            )
+          done
+
+      - name: Pack toolchain package
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          REPOSITORY_COMMIT: ${{ github.sha }}
+        run: >-
+          dotnet pack packaging/SlangDxcBundle.Toolchain/SlangDxcBundle.Toolchain.csproj
+          --configuration Release
+          --output artifacts/packages
+          --property:PackageVersion=$PACKAGE_VERSION
+          --property:Version=$PACKAGE_VERSION
+          --property:RepositoryCommit=$REPOSITORY_COMMIT
+          --property:ContinuousIntegrationBuild=true
+          --property:ToolchainInputDirectory=$GITHUB_WORKSPACE/artifacts/toolchain-package/tools/slang/
+          -p:TreatWarningsAsErrors=true
+
+      - name: Verify toolchain package
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
+          DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
+        run: |
+          package="artifacts/packages/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg"
+          python3 scripts/verify_toolchain_package.py \
+            --package "$package" \
+            --package-version "$PACKAGE_VERSION" \
+            --slang-version "$SLANG_VERSION" \
+            --dxc-version "$DXC_VERSION" \
+            --maximum-size 240000000
+
+      - name: Upload toolchain package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-package
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
+
+  package-test:
+    needs: [resolve, assemble-package]
+    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    name: Package ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x86_64
+            runner: windows-2025
+            target_runtime: linux-x64
+          - platform: linux-x86_64
+            runner: ubuntu-22.04
+            target_runtime: win-x64
+          - platform: linux-aarch64
+            runner: ubuntu-22.04-arm
+            target_runtime: win-x64
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            target_runtime: win-x64
+          - platform: macos-aarch64
+            runner: macos-15
+            target_runtime: win-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download toolchain package
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-package
+          path: artifacts/package
+
+      - name: Pack transitive consumer dependency
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+        run: |
+          dotnet pack tests/ToolchainConsumerDependency/ToolchainConsumerDependency.csproj \
+            --configuration Release \
+            --output artifacts/package \
+            --source "$GITHUB_WORKSPACE/artifacts/package" \
+            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
+            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
+            --property:NuGetAudit=false \
+            -p:TreatWarningsAsErrors=true
+
+      - name: Restore package consumer
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          TARGET_RUNTIME: ${{ matrix.target_runtime }}
+        run: |
+          dotnet restore tests/ToolchainConsumer/ToolchainConsumer.csproj \
+            --source "$GITHUB_WORKSPACE/artifacts/package" \
+            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
+            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
+            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
+            --property:UseAppHost=false \
+            --property:SelfContained=false \
+            --property:NuGetAudit=false
+
+      - name: Verify passive and read-only package behavior
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
+          DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          TARGET_RUNTIME: ${{ matrix.target_runtime }}
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: ""
+        run: |
+          set -euo pipefail
+          package_root="$GITHUB_WORKSPACE/artifacts/restored-packages/slangdxcbundle.toolchain/$PACKAGE_VERSION/tools/slang"
+          if [[ "$RUNNER_OS" != "Windows" ]]; then
+            chmod -R a-w "$package_root"
+          fi
+          before=$(python3 scripts/verify_toolchain_installation.py \
+            --root "$package_root" \
+            --slang-version "$SLANG_VERSION" \
+            --dxc-version "$DXC_VERSION" \
+            --expected-platform "$EXPECTED_PLATFORM")
+
+          dotnet build tests/ToolchainConsumer/ToolchainConsumer.csproj \
+            --configuration Release \
+            --no-restore \
+            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
+            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
+            --property:ExpectedSlangPlatform="$EXPECTED_PLATFORM" \
+            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
+            --property:UseAppHost=false \
+            --property:SelfContained=false \
+            --property:RunToolchainSmoke=false \
+            -p:TreatWarningsAsErrors=true
+          if find tests/ToolchainConsumer/obj -name 'smoke.*' -print -quit | grep -q .; then
+            echo "Passive package build unexpectedly generated shader output" >&2
+            exit 1
+          fi
+
+          dotnet build tests/ToolchainConsumer/ToolchainConsumer.csproj \
+            --configuration Release \
+            --no-restore \
+            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
+            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
+            --property:ExpectedSlangPlatform="$EXPECTED_PLATFORM" \
+            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
+            --property:UseAppHost=false \
+            --property:SelfContained=false \
+            -p:TreatWarningsAsErrors=true
+
+          after=$(python3 scripts/verify_toolchain_installation.py \
+            --root "$package_root" \
+            --slang-version "$SLANG_VERSION" \
+            --dxc-version "$DXC_VERSION" \
+            --expected-platform "$EXPECTED_PLATFORM")
+          if [[ "$before" != "$after" ]]; then
+            echo "Package installation changed during the consumer build" >&2
+            exit 1
+          fi
+          if find tests/ToolchainConsumer/obj -type f \( -name slangc -o -name slangc.exe \) -print -quit | grep -q .; then
+            echo "Consumer build created a project-local toolchain installation" >&2
+            exit 1
+          fi
+
+  publish-toolchain:
+    needs: [resolve, toolchain, assemble-package, package-test]
+    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download toolchain package
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-package
+          path: artifacts/package
+
+      - name: Request temporary NuGet credential
+        if: needs.resolve.outputs.toolchain_package_exists != 'true'
+        id: nuget-login
+        uses: NuGet/login@v1.2.0
+        with:
+          user: stanoddly
+
+      - name: Publish toolchain package
+        if: needs.resolve.outputs.toolchain_package_exists != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+        run: >-
+          dotnet nuget push
+          artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg
+          --api-key "$NUGET_API_KEY"
+          --source https://api.nuget.org/v3/index.json

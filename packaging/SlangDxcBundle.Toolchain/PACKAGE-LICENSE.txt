@@ -1,0 +1,8 @@
+The packaging scripts and MSBuild integration in SlangDxcBundle.Toolchain are
+licensed under the MIT License included as LICENSE.
+
+The Slang, DirectX Shader Compiler, and other third-party files contained under
+tools/slang are distributed under their respective licenses. Each platform
+directory contains the applicable root LICENSE, LICENSES directory, and
+SLANG-DXC-BUNDLE.json provenance manifest. This package does not relicense those
+third-party components under the repository's MIT License.
