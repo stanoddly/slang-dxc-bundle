@@ -191,9 +191,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.platform }}
-          path: |
-            dist/*.zip
-            dist/*.sha256
+          path: dist/*.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -232,7 +230,7 @@ jobs:
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
         run: |
           gh release create "$BUNDLE_TAG" \
-            dist/* \
+            dist/*.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "$BUNDLE_TAG" \
             --notes-file release-notes.md \
@@ -284,17 +282,7 @@ jobs:
           gh release download "$BUNDLE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "$BUNDLE_TAG-${{ matrix.platform }}.zip" \
-            --pattern "$BUNDLE_TAG-${{ matrix.platform }}.zip.sha256" \
             --dir source
-          (
-            cd source
-            checksum="$BUNDLE_TAG-${{ matrix.platform }}.zip.sha256"
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum -c "$checksum"
-            else
-              shasum -a 256 -c "$checksum"
-            fi
-          )
 
       - name: Package slim toolchain
         shell: bash
@@ -347,9 +335,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: toolchain-${{ matrix.platform }}
-          path: |
-            dist/*.zip
-            dist/*.sha256
+          path: dist/*.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -377,10 +363,6 @@ jobs:
         shell: bash
         run: |
           for archive in artifacts/toolchain-archives/*-toolchain-*.zip; do
-            (
-              cd "$(dirname "$archive")"
-              sha256sum -c "$(basename "$archive").sha256"
-            )
             platform="${archive##*-toolchain-}"
             platform="${platform%.zip}"
             destination="artifacts/toolchain-package/tools/slang/$platform"
@@ -420,19 +402,12 @@ jobs:
             --slang-version "$SLANG_VERSION" \
             --dxc-version "$DXC_VERSION" \
             --maximum-size 240000000
-          (
-            cd artifacts/packages
-            sha256sum "SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" \
-              > "SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg.sha256"
-          )
 
       - name: Upload toolchain package
         uses: actions/upload-artifact@v7
         with:
           name: nuget-package
-          path: |
-            artifacts/packages/*.nupkg
-            artifacts/packages/*.nupkg.sha256
+          path: artifacts/packages/*.nupkg
           if-no-files-found: error
           retention-days: 7
 

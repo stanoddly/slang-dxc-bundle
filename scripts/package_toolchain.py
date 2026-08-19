@@ -24,11 +24,6 @@ def sha256_stream(stream) -> str:
     return digest.hexdigest()
 
 
-def sha256_file(path: Path) -> str:
-    with path.open("rb") as file:
-        return sha256_stream(file)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle", type=Path, required=True)
@@ -145,12 +140,6 @@ def main() -> int:
                         compresslevel=9,
                     )
 
-    archive_digest = sha256_file(archive_path)
-    checksum_path = archive_path.with_suffix(archive_path.suffix + ".sha256")
-    checksum_path.write_text(
-        f"{archive_digest}  {archive_path.name}\n",
-        encoding="utf-8",
-    )
     print(archive_path)
     return 0
 

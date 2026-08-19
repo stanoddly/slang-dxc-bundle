@@ -158,12 +158,7 @@ def main() -> int:
     bundle_release = get_release(arguments.repository, bundle_tag, arguments.token)
     bundle_release_exists = bundle_release is not None
     expected_bundle_assets = {
-        name
-        for platform in PLATFORMS
-        for name in (
-            f"{bundle_tag}-{platform}.zip",
-            f"{bundle_tag}-{platform}.zip.sha256",
-        )
+        f"{bundle_tag}-{platform}.zip" for platform in PLATFORMS
     }
     bundle_assets = (
         {asset["name"] for asset in bundle_release["assets"]}
