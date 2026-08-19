@@ -274,7 +274,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Download published slim toolchain
+        if: needs.resolve.outputs.toolchain_assets_complete == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+        run: |
+          mkdir dist
+          gh release download "$BUNDLE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip" \
+            --pattern "$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip.sha256" \
+            --dir dist
+          (
+            cd dist
+            checksum="$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip.sha256"
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum -c "$checksum"
+            else
+              shasum -a 256 -c "$checksum"
+            fi
+          )
+
       - name: Download full bundle
+        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -288,10 +312,16 @@ jobs:
             --dir source
           (
             cd source
-            sha256sum -c "$BUNDLE_TAG-${{ matrix.platform }}.zip.sha256"
+            checksum="$BUNDLE_TAG-${{ matrix.platform }}.zip.sha256"
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum -c "$checksum"
+            else
+              shasum -a 256 -c "$checksum"
+            fi
           )
 
       - name: Package slim toolchain
+        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
         shell: bash
         env:
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
@@ -592,6 +622,7 @@ jobs:
           path: artifacts/package
 
       - name: Publish missing slim release assets
+        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}

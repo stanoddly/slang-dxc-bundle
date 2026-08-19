@@ -78,6 +78,27 @@ def nuget_package_exists(package_id: str, version: str) -> bool:
     return version.lower() in versions
 
 
+def normalize_nuget_version(version: str) -> str:
+    match = re.fullmatch(
+        r"(?P<numeric>[0-9]+(?:\.[0-9]+){0,3})"
+        r"(?P<prerelease>-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+        r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+        version,
+    )
+    if match is None:
+        raise RuntimeError(f"Invalid NuGet package version derived from Slang: {version}")
+
+    components = [
+        str(int(component)) for component in match.group("numeric").split(".")
+    ]
+    while len(components) < 3:
+        components.append("0")
+    if len(components) == 4 and components[3] == "0":
+        components.pop()
+
+    return ".".join(components) + (match.group("prerelease") or "")
+
+
 def write_output(name: str, value: str) -> None:
     output_path = os.environ.get("GITHUB_OUTPUT")
     if output_path:
@@ -157,7 +178,7 @@ def main() -> int:
                 + ", ".join(missing_bundle_assets)
             )
 
-    toolchain_package_version = slang_version
+    toolchain_package_version = normalize_nuget_version(slang_version)
     expected_toolchain_assets = {
         name
         for platform in PLATFORMS

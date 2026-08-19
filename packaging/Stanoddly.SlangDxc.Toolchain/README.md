@@ -6,6 +6,6 @@ The package contains expanded tool trees for Linux x64/ARM64, Windows x64, and m
 
 The package does not select a platform or run any tools. Downstream build integration must select a build-host directory beneath the exposed root independently of the application target runtime.
 
-Package versions initially match their Slang version. Exact DXC versions, source revisions, and binary digests are recorded in each platform's `SLANG-DXC-BUNDLE.json`.
+Package versions initially match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. Exact DXC versions, source revisions, and binary digests are recorded in each platform's `SLANG-DXC-BUNDLE.json`.
 
 The packaging integration is MIT-licensed. The bundled binaries retain their upstream licenses and notices within every platform directory.

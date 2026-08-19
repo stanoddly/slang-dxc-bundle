@@ -31,7 +31,7 @@ Each release also provides a `.sha256` file for every archive.
 
 The package is passive. Its only build integration is the transitive MSBuild property `SlangDxcToolchainRoot`, which points to the common `tools/slang/` directory. Downstream integrations select and execute the appropriate build-host compiler independently of the application's target runtime identifier.
 
-Package versions initially match their Slang version. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections.
+Package versions initially match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections.
 
 NuGet publication uses trusted publishing. The nuget.org policy must authorize the `stanoddly/slang-dxc-bundle` repository and the `release.yml` workflow before the first package is published.
 
