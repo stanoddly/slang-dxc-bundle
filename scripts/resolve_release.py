@@ -179,27 +179,15 @@ def main() -> int:
             )
 
     toolchain_package_version = normalize_nuget_version(slang_version)
-    expected_toolchain_assets = {
-        name
-        for platform in PLATFORMS
-        for name in (
-            f"{bundle_tag}-toolchain-{platform}.zip",
-            f"{bundle_tag}-toolchain-{platform}.zip.sha256",
-        )
-    }
-    toolchain_assets_complete = expected_toolchain_assets <= bundle_assets
     toolchain_package_exists = nuget_package_exists(
         TOOLCHAIN_PACKAGE_ID,
         toolchain_package_version,
     )
     should_build_bundle = not bundle_release_exists
-    should_prepare_toolchain = (
-        not toolchain_assets_complete or not toolchain_package_exists
-    )
+    should_prepare_toolchain = not toolchain_package_exists
 
     write_output("should_build_bundle", str(should_build_bundle).lower())
     write_output("should_prepare_toolchain", str(should_prepare_toolchain).lower())
-    write_output("toolchain_assets_complete", str(toolchain_assets_complete).lower())
     write_output("toolchain_package_exists", str(toolchain_package_exists).lower())
     write_output("toolchain_package_version", toolchain_package_version)
     write_output("slang_tag", slang_tag)
@@ -214,7 +202,6 @@ def main() -> int:
             {
                 "should_build_bundle": should_build_bundle,
                 "should_prepare_toolchain": should_prepare_toolchain,
-                "toolchain_assets_complete": toolchain_assets_complete,
                 "toolchain_package_exists": toolchain_package_exists,
                 "toolchain_package_version": toolchain_package_version,
                 "slang_tag": slang_tag,

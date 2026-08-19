@@ -25,7 +25,6 @@ jobs:
     outputs:
       should_build_bundle: ${{ steps.release.outputs.should_build_bundle }}
       should_prepare_toolchain: ${{ steps.release.outputs.should_prepare_toolchain }}
-      toolchain_assets_complete: ${{ steps.release.outputs.toolchain_assets_complete }}
       toolchain_package_exists: ${{ steps.release.outputs.toolchain_package_exists }}
       toolchain_package_version: ${{ steps.release.outputs.toolchain_package_version }}
       slang_tag: ${{ steps.release.outputs.slang_tag }}
@@ -237,6 +236,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$BUNDLE_TAG" \
             --notes-file release-notes.md \
+            --target "$GITHUB_SHA" \
             --latest
 
   toolchain:
@@ -274,31 +274,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download published slim toolchain
-        if: needs.resolve.outputs.toolchain_assets_complete == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
-        run: |
-          mkdir dist
-          gh release download "$BUNDLE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip" \
-            --pattern "$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip.sha256" \
-            --dir dist
-          (
-            cd dist
-            checksum="$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip.sha256"
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum -c "$checksum"
-            else
-              shasum -a 256 -c "$checksum"
-            fi
-          )
-
       - name: Download full bundle
-        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -321,7 +297,6 @@ jobs:
           )
 
       - name: Package slim toolchain
-        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
         shell: bash
         env:
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
@@ -368,7 +343,7 @@ jobs:
             exit 1
           fi
 
-      - name: Upload slim toolchain
+      - name: Upload slim toolchain artifact
         uses: actions/upload-artifact@v7
         with:
           name: toolchain-${{ matrix.platform }}
@@ -600,7 +575,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
-      contents: write
       id-token: write
     steps:
       - name: Setup .NET
@@ -608,44 +582,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download slim toolchains
-        uses: actions/download-artifact@v8
-        with:
-          path: artifacts/toolchain-archives
-          pattern: toolchain-*
-          merge-multiple: true
-
       - name: Download toolchain package
         uses: actions/download-artifact@v8
         with:
           name: nuget-package
           path: artifacts/package
-
-      - name: Publish missing slim release assets
-        if: needs.resolve.outputs.toolchain_assets_complete != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
-        run: |
-          release=$(gh release view "$BUNDLE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)
-          for asset in artifacts/toolchain-archives/*; do
-            asset_name=$(basename "$asset")
-            existing_count=$(jq --arg name "$asset_name" '[.assets[] | select(.name == $name)] | length' <<< "$release")
-            if [[ "$existing_count" == 0 ]]; then
-              gh release upload "$BUNDLE_TAG" "$asset" --repo "$GITHUB_REPOSITORY"
-              continue
-            fi
-            if [[ "$existing_count" != 1 ]]; then
-              echo "Release contains duplicate asset names: $asset_name" >&2
-              exit 1
-            fi
-            existing_digest=$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .digest // ""' <<< "$release")
-            local_digest="sha256:$(sha256sum "$asset" | cut -d ' ' -f 1)"
-            if [[ "$existing_digest" != "$local_digest" ]]; then
-              echo "Existing release asset differs from tested artifact: $asset_name" >&2
-              exit 1
-            fi
-          done
 
       - name: Request temporary NuGet credential
         if: needs.resolve.outputs.toolchain_package_exists != 'true'
