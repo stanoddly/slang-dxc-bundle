@@ -12,6 +12,8 @@ Slang supports DXIL through the downstream DXC library, but its official release
 | macOS x64 | `lib/libdxcompiler.dylib` |
 | macOS ARM64 | `lib/libdxcompiler.dylib` |
 
+Building DXC from source also broadens platform coverage. DXC v1.9.2602 does not publish binary archives for macOS or Linux ARM64, while these bundles provide `dxcompiler` for both macOS architectures and Linux ARM64.
+
 The separate `dxil` validator library is not included.
 
 ## Releases
