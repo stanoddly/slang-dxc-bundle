@@ -10,7 +10,7 @@ from xml.etree import ElementTree
 from toolchain_layout import PLATFORMS, binary_entries, package_entry
 
 
-PACKAGE_ID = "Stanoddly.SlangDxc.Toolchain"
+PACKAGE_ID = "SlangDxcBundle.Toolchain"
 
 
 def main() -> int:

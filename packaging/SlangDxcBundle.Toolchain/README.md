@@ -1,4 +1,4 @@
-# Stanoddly.SlangDxc.Toolchain
+# Unofficial Slang/DXC Toolchain Bundle
 
 Cross-platform build-host tooling from [Slang](https://github.com/shader-slang/slang), bundled with the source-built [DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler) library pinned by that Slang release.
 

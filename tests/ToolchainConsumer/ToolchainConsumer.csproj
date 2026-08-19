@@ -15,7 +15,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Stanoddly.SlangDxc.Toolchain.ConsumerTest.Dependency"
+        <PackageReference Include="SlangDxcBundle.Toolchain.ConsumerTest.Dependency"
                           Version="[1.0.0]" />
     </ItemGroup>
 

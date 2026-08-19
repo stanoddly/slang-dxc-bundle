@@ -1,4 +1,4 @@
-The packaging scripts and MSBuild integration in Stanoddly.SlangDxc.Toolchain are
+The packaging scripts and MSBuild integration in SlangDxcBundle.Toolchain are
 licensed under the MIT License included as LICENSE.
 
 The Slang, DirectX Shader Compiler, and other third-party files contained under

@@ -422,7 +422,7 @@ jobs:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
           REPOSITORY_COMMIT: ${{ github.sha }}
         run: >-
-          dotnet pack packaging/Stanoddly.SlangDxc.Toolchain/Stanoddly.SlangDxc.Toolchain.csproj
+          dotnet pack packaging/SlangDxcBundle.Toolchain/SlangDxcBundle.Toolchain.csproj
           --configuration Release
           --output artifacts/packages
           --property:PackageVersion=$PACKAGE_VERSION
@@ -438,7 +438,7 @@ jobs:
           SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
           DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
         run: |
-          package="artifacts/packages/Stanoddly.SlangDxc.Toolchain.$PACKAGE_VERSION.nupkg"
+          package="artifacts/packages/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg"
           python3 scripts/verify_toolchain_package.py \
             --package "$package" \
             --package-version "$PACKAGE_VERSION" \
@@ -447,8 +447,8 @@ jobs:
             --maximum-size 240000000
           (
             cd artifacts/packages
-            sha256sum "Stanoddly.SlangDxc.Toolchain.$PACKAGE_VERSION.nupkg" \
-              > "Stanoddly.SlangDxc.Toolchain.$PACKAGE_VERSION.nupkg.sha256"
+            sha256sum "SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" \
+              > "SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg.sha256"
           )
 
       - name: Upload toolchain package
@@ -543,7 +543,7 @@ jobs:
           NO_PROXY: ""
         run: |
           set -euo pipefail
-          package_root="$GITHUB_WORKSPACE/artifacts/restored-packages/stanoddly.slangdxc.toolchain/$PACKAGE_VERSION/tools/slang"
+          package_root="$GITHUB_WORKSPACE/artifacts/restored-packages/slangdxcbundle.toolchain/$PACKAGE_VERSION/tools/slang"
           if [[ "$RUNNER_OS" != "Windows" ]]; then
             chmod -R a-w "$package_root"
           fi
@@ -661,6 +661,6 @@ jobs:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
         run: >-
           dotnet nuget push
-          artifacts/package/Stanoddly.SlangDxc.Toolchain.$PACKAGE_VERSION.nupkg
+          artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg
           --api-key "$NUGET_API_KEY"
           --source https://api.nuget.org/v3/index.json

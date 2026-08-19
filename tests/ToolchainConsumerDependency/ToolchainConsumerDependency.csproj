@@ -5,7 +5,7 @@
         <EnableDefaultItems>false</EnableDefaultItems>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <IsPackable>true</IsPackable>
-        <PackageId>Stanoddly.SlangDxc.Toolchain.ConsumerTest.Dependency</PackageId>
+        <PackageId>SlangDxcBundle.Toolchain.ConsumerTest.Dependency</PackageId>
         <PackageVersion>1.0.0</PackageVersion>
         <Authors>stanoddly</Authors>
         <Description>Local-only package for testing transitive Slang/DXC toolchain build assets.</Description>
@@ -13,7 +13,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Stanoddly.SlangDxc.Toolchain"
+        <PackageReference Include="SlangDxcBundle.Toolchain"
                           Version="[$(ToolchainPackageVersion)]" />
     </ItemGroup>
 

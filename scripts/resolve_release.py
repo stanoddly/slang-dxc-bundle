@@ -11,7 +11,7 @@ import urllib.request
 
 GITHUB_API_URL = "https://api.github.com"
 NUGET_FLAT_CONTAINER_URL = "https://api.nuget.org/v3-flatcontainer"
-TOOLCHAIN_PACKAGE_ID = "Stanoddly.SlangDxc.Toolchain"
+TOOLCHAIN_PACKAGE_ID = "SlangDxcBundle.Toolchain"
 SLANG_REPOSITORY = "shader-slang/slang"
 PLATFORMS = (
     "windows-x86_64",
