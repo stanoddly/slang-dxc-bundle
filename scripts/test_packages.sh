@@ -27,14 +27,18 @@ common_properties=(
   -p:TreatWarningsAsErrors=true
 )
 
+saved_global_json="$(mktemp)"
+cp "$tests/global.json" "$saved_global_json"
 restore_global_json() {
-  git -C "$repository" checkout -- tests/global.json 2>/dev/null || true
+  cp "$saved_global_json" "$tests/global.json"
+  rm -f "$saved_global_json"
 }
 trap restore_global_json EXIT
 
+# MSYS rewrites /S and /D as paths for native executables, hence MSYS_NO_PATHCONV.
 set_writable() {
   if [[ "$windows_host" == true ]]; then
-    attrib -R "$(cygpath -w "$1")\\*" /S /D
+    MSYS_NO_PATHCONV=1 attrib -R "$(cygpath -w "$1")\\*" /S /D
   else
     chmod -R u+w "$1"
   fi
@@ -42,7 +46,7 @@ set_writable() {
 
 set_read_only() {
   if [[ "$windows_host" == true ]]; then
-    attrib +R "$(cygpath -w "$1")\\*" /S /D
+    MSYS_NO_PATHCONV=1 attrib +R "$(cygpath -w "$1")\\*" /S /D
   else
     chmod -R a-w "$1"
   fi
@@ -169,7 +173,12 @@ dotnet build "$tests/ToolchainDirectReference/ToolchainDirectReference.csproj" -
 
 echo "== A downstream SDK can pin the toolchain through a nested import"
 dotnet pack "$tests/ToolchainConsumerSdk/ToolchainConsumerSdk.csproj" --configuration Release --output "$PACKAGE_FEED" "${common_properties[@]}"
+# The nested import must supply the version itself, so this project sees no msbuild-sdks pin.
+cat > "$tests/ToolchainNestedSdkConsumer/global.json" <<'EOF'
+{ "msbuild-sdks": { } }
+EOF
 dotnet build "$tests/ToolchainNestedSdkConsumer/ToolchainNestedSdkConsumer.csproj" --configuration Release "${common_properties[@]}"
+rm -f "$tests/ToolchainNestedSdkConsumer/global.json"
 
 echo "== <Sdk> next to a stale PackageReference builds without warnings"
 dotnet build "$tests/ToolchainDualReference/ToolchainDualReference.csproj" --configuration Release "${common_properties[@]}" -warnaserror
@@ -186,5 +195,11 @@ expect_failure "does not support this build host" restore "$tests/ToolchainCpmCo
 echo "== Assets restored on another host fail the build"
 dotnet restore "$tests/ToolchainCpmConsumer/ToolchainCpmConsumer.csproj" "${common_properties[@]}" --property:_SlangDxcToolchainHostRid="$other_rid"
 expect_failure "but this build host is $host_rid" build "$tests/ToolchainCpmConsumer/ToolchainCpmConsumer.csproj" --configuration Release --no-restore "${common_properties[@]}"
+
+echo "== A missing platform package fails the build"
+dotnet restore "$tests/ToolchainCpmConsumer/ToolchainCpmConsumer.csproj" "${common_properties[@]}"
+set_writable "$NUGET_PACKAGES/slangdxcbundle.toolchain.$host_rid"
+rm -rf "$NUGET_PACKAGES/slangdxcbundle.toolchain.$host_rid"
+expect_failure "is not restored" build "$tests/ToolchainCpmConsumer/ToolchainCpmConsumer.csproj" --configuration Release --no-restore "${common_properties[@]}"
 
 echo "All package tests passed for $EXPECTED_PLATFORM ($host_rid), toolchain $PACKAGE_VERSION"

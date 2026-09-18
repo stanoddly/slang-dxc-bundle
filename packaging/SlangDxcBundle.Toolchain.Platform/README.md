@@ -12,7 +12,7 @@ Most consumers should not reference this package directly. The [SlangDxcBundle.T
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="x.y.z" />
 </Project>
 ```
 

@@ -6,17 +6,17 @@ During restore, the SDK detects the build host and references the matching platf
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="x.y.z" />
 </Project>
 ```
 
 The version can also live in `global.json`, in which case the project uses `<Sdk Name="SlangDxcBundle.Toolchain" />`:
 
 ```json
-{ "msbuild-sdks": { "SlangDxcBundle.Toolchain": "<version>" } }
+{ "msbuild-sdks": { "SlangDxcBundle.Toolchain": "x.y.z" } }
 ```
 
-Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="<version>" />` in its `Sdk.props` and the matching `Sdk.targets` import.
+Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` in its `Sdk.props` and the matching `Sdk.targets` import.
 
 Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that.
 

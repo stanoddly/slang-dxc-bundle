@@ -191,13 +191,14 @@ def main() -> int:
     missing_packages = (
         [] if toolchain_version_is_legacy else missing_toolchain_packages(toolchain_package_version)
     )
+    # A legacy version counts as handled whether or not it was ever published; the legacy layout is no longer built.
     toolchain_package_exists = not missing_packages
     should_build_bundle = not bundle_release_exists
     should_prepare_toolchain = not toolchain_package_exists
     if toolchain_version_is_legacy:
         print(
-            f"Toolchain package version {toolchain_package_version} is a legacy single package; "
-            f"the SDK layout starts after {LAST_LEGACY_VERSION}",
+            f"Toolchain package version {toolchain_package_version} belongs to the legacy single-package layout, "
+            f"which is no longer built; the SDK layout starts after {LAST_LEGACY_VERSION}",
             file=sys.stderr,
         )
 

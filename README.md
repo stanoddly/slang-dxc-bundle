@@ -39,11 +39,11 @@ Releases are named `slang-<Slang version>-dxc-<DXC version>`. Every bundle conta
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="x.y.z" />
 </Project>
 ```
 
-The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="<version>" />` (the `Version` attribute of `<Import>` expands properties; the `<Sdk>` element does not). A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves, for example on a host the SDK does not detect, can reference a platform package directly.
+The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` (the `Version` attribute of `<Import>` expands properties; the `<Sdk>` element does not). A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves, for example on a host the SDK does not detect, can reference a platform package directly.
 
 Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that. The legacy versions stay on nuget.org unchanged.
 

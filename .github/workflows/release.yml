@@ -221,7 +221,7 @@ jobs:
           - Slang: [${SLANG_TAG}](https://github.com/shader-slang/slang/releases/tag/${SLANG_TAG})
           - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
           - DXC commit: \`${DXC_COMMIT}\`
-          - NuGet: the slim tool trees ship as MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} plus one \`SlangDxcBundle.Toolchain.<rid>\` package per build host, published once every host has tested them
+          - NuGet: the slim tool trees ship as MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} plus one \`SlangDxcBundle.Toolchain.<rid>\` package per build host, published once every host has tested them; reference it with \`<Sdk Name="SlangDxcBundle.Toolchain" Version="${PACKAGE_VERSION}" />\` instead of a \`PackageReference\` (versions up to 2026.18.0)
 
           Each full archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every full archive passed a native DXIL Shader Model 6.0 compilation smoke test.
           EOF
@@ -502,7 +502,8 @@ jobs:
     needs: [resolve, toolchain, assemble-package, package-test]
     if: needs.resolve.outputs.should_prepare_toolchain == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Leaves room for the 30 minute platform package availability wait.
+    timeout-minutes: 45
     permissions:
       id-token: write
     steps:
