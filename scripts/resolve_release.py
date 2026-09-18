@@ -8,18 +8,12 @@ import sys
 import urllib.error
 import urllib.request
 
+from toolchain_layout import PLATFORMS, package_ids
+
 
 GITHUB_API_URL = "https://api.github.com"
 NUGET_FLAT_CONTAINER_URL = "https://api.nuget.org/v3-flatcontainer"
-TOOLCHAIN_PACKAGE_ID = "SlangDxcBundle.Toolchain"
 SLANG_REPOSITORY = "shader-slang/slang"
-PLATFORMS = (
-    "windows-x86_64",
-    "linux-x86_64",
-    "linux-aarch64",
-    "macos-x86_64",
-    "macos-aarch64",
-)
 
 
 def request_json(url: str, token: str) -> dict:
@@ -76,6 +70,10 @@ def nuget_package_exists(package_id: str, version: str) -> bool:
 
     versions = {str(value).lower() for value in response.get("versions", [])}
     return version.lower() in versions
+
+
+def missing_toolchain_packages(version: str, package_exists=nuget_package_exists) -> list[str]:
+    return [package_id for package_id in package_ids() if not package_exists(package_id, version)]
 
 
 def normalize_nuget_version(version: str) -> str:
@@ -174,10 +172,8 @@ def main() -> int:
             )
 
     toolchain_package_version = normalize_nuget_version(slang_version)
-    toolchain_package_exists = nuget_package_exists(
-        TOOLCHAIN_PACKAGE_ID,
-        toolchain_package_version,
-    )
+    missing_packages = missing_toolchain_packages(toolchain_package_version)
+    toolchain_package_exists = not missing_packages
     should_build_bundle = not bundle_release_exists
     should_prepare_toolchain = not toolchain_package_exists
 
@@ -199,6 +195,7 @@ def main() -> int:
                 "should_prepare_toolchain": should_prepare_toolchain,
                 "toolchain_package_exists": toolchain_package_exists,
                 "toolchain_package_version": toolchain_package_version,
+                "missing_toolchain_packages": missing_packages,
                 "slang_tag": slang_tag,
                 "dxc_tag": dxc_tag,
                 "dxc_commit": dxc_commit,

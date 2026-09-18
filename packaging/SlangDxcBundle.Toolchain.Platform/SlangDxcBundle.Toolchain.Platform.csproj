@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultItems>false</EnableDefaultItems>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <IsPackable>true</IsPackable>
+        <PackageId>SlangDxcBundle.Toolchain.$(ToolchainRuntimeIdentifier)</PackageId>
+        <Title>Unofficial Slang/DXC Toolchain Bundle ($(ToolchainRuntimeIdentifier))</Title>
+        <PackageVersion Condition="'$(PackageVersion)' == ''">0.0.0-local</PackageVersion>
+        <Authors>stanoddly</Authors>
+        <Description>Unofficial $(ToolchainRuntimeIdentifier) build-host Slang compiler tooling with source-built DXC support. Reference through the SlangDxcBundle.Toolchain MSBuild project SDK.</Description>
+        <PackageLicenseFile>PACKAGE-LICENSE.txt</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <PackageTags>slang;dxc;shader;compiler;build;unofficial;$(ToolchainRuntimeIdentifier)</PackageTags>
+        <PackageProjectUrl>https://github.com/stanoddly/slang-dxc-bundle</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/stanoddly/slang-dxc-bundle</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <MinClientVersion>5.0.0</MinClientVersion>
+        <ToolchainInputDirectory Condition="'$(ToolchainInputDirectory)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'build', 'toolchain-package', 'tools', 'slang'))</ToolchainInputDirectory>
+        <ToolchainPlatformDirectory>$([MSBuild]::NormalizeDirectory('$(ToolchainInputDirectory)', '$(ToolchainPlatform)'))</ToolchainPlatformDirectory>
+        <ToolchainPropsTemplate>$(MSBuildProjectDirectory)\buildTransitive\SlangDxcBundle.Toolchain.Platform.props</ToolchainPropsTemplate>
+        <ToolchainPropsOutput>$(BaseIntermediateOutputPath)$(PackageId).props</ToolchainPropsOutput>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="\" />
+        <None Include="PACKAGE-LICENSE.txt" Pack="true" PackagePath="\" />
+        <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+        <None Include="$(ToolchainPropsOutput)" Pack="true" PackagePath="buildTransitive" />
+        <_ToolchainFile Include="$(ToolchainPlatformDirectory)**\*" />
+        <None Include="$(ToolchainPlatformDirectory)**\*" Pack="true" PackagePath="tools\slang\$(ToolchainPlatform)" />
+    </ItemGroup>
+
+    <Target Name="ValidateToolchainPackageInputs" BeforeTargets="_GetPackageFiles">
+        <Error Text="ToolchainPlatform is required (one of linux-aarch64, linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64)."
+               Condition="'$(ToolchainPlatform)' == ''" />
+        <Error Text="ToolchainRuntimeIdentifier is required (the .NET RID of the build host that ToolchainPlatform serves)."
+               Condition="'$(ToolchainRuntimeIdentifier)' == ''" />
+        <Error Text="Toolchain platform directory does not exist: $(ToolchainPlatformDirectory)"
+               Condition="!Exists('$(ToolchainPlatformDirectory)')" />
+        <Error Text="Toolchain platform directory is empty: $(ToolchainPlatformDirectory)"
+               Condition="'@(_ToolchainFile)' == ''" />
+    </Target>
+
+    <!-- The consumer-side props must name the platform; NuGet imports build assets by package ID, so the file name is derived too. -->
+    <Target Name="GenerateToolchainProps" AfterTargets="ValidateToolchainPackageInputs" BeforeTargets="_GetPackageFiles">
+        <ReadLinesFromFile File="$(ToolchainPropsTemplate)">
+            <Output TaskParameter="Lines" ItemName="_ToolchainPropsTemplateLine" />
+        </ReadLinesFromFile>
+        <ItemGroup>
+            <_ToolchainPropsLine Include="@(_ToolchainPropsTemplateLine->Replace('{{ToolchainPlatform}}', '$(ToolchainPlatform)')->Replace('{{ToolchainRuntimeIdentifier}}', '$(ToolchainRuntimeIdentifier)'))" />
+        </ItemGroup>
+        <WriteLinesToFile File="$(ToolchainPropsOutput)" Lines="@(_ToolchainPropsLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    </Target>
+
+</Project>

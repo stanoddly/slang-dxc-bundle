@@ -1,5 +1,0 @@
-<Project>
-    <PropertyGroup>
-        <SlangDxcToolchainRoot Condition="'$(SlangDxcToolchainRoot)' == ''">$(MSBuildThisFileDirectory)..\tools\slang\</SlangDxcToolchainRoot>
-    </PropertyGroup>
-</Project>

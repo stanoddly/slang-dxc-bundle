@@ -15,14 +15,20 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--slang-version", required=True)
     parser.add_argument("--dxc-version", required=True)
-    parser.add_argument("--expected-platform", choices=PLATFORMS)
+    parser.add_argument("--platform", choices=PLATFORMS, required=True)
     arguments = parser.parse_args()
 
     if not arguments.root.is_dir():
         raise RuntimeError(f"Toolchain root does not exist: {arguments.root}")
 
     digest = hashlib.sha256()
-    for platform in PLATFORMS:
+    platform_directories = sorted(path.name for path in arguments.root.iterdir() if path.is_dir())
+    if platform_directories != [arguments.platform]:
+        raise RuntimeError(
+            f"Toolchain root must contain only {arguments.platform}, found: "
+            + ", ".join(platform_directories)
+        )
+    for platform in (arguments.platform,):
         platform_root = arguments.root / platform
         if not platform_root.is_dir():
             raise RuntimeError(f"Toolchain platform does not exist: {platform_root}")
@@ -62,12 +68,9 @@ def main() -> int:
             + ", ".join(str(path) for path in generated_caches)
         )
 
-    if arguments.expected_platform:
-        compiler = arguments.root / arguments.expected_platform / compiler_entry(
-            arguments.expected_platform
-        )
-        if os.name != "nt" and not os.access(compiler, os.X_OK):
-            raise RuntimeError(f"Toolchain compiler is not executable: {compiler}")
+    compiler = arguments.root / arguments.platform / compiler_entry(arguments.platform)
+    if os.name != "nt" and not os.access(compiler, os.X_OK):
+        raise RuntimeError(f"Toolchain compiler is not executable: {compiler}")
 
     for path in sorted(arguments.root.rglob("*")):
         if not path.is_file():

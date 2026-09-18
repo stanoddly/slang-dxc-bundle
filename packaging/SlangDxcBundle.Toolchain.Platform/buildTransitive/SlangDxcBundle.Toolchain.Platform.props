@@ -1,0 +1,10 @@
+<Project>
+    <PropertyGroup>
+        <SlangDxcToolchainRoot Condition="'$(SlangDxcToolchainRoot)' == ''">$(MSBuildThisFileDirectory)..\tools\slang\</SlangDxcToolchainRoot>
+        <SlangDxcToolchainPlatform Condition="'$(SlangDxcToolchainPlatform)' == ''">{{ToolchainPlatform}}</SlangDxcToolchainPlatform>
+        <SlangDxcToolchainDirectory Condition="'$(SlangDxcToolchainDirectory)' == ''">$(SlangDxcToolchainRoot){{ToolchainPlatform}}\</SlangDxcToolchainDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+        <SlangDxcToolchainPackage Include="{{ToolchainRuntimeIdentifier}}" />
+    </ItemGroup>
+</Project>

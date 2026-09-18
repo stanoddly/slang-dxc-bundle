@@ -1,0 +1,8 @@
+<Project>
+    <!-- Imported only through a PackageReference; the SDK resolver reads Sdk/ alone. The marker keeps a project that carries both quiet. -->
+    <Import Project="..\Sdk\SlangDxcBundle.Toolchain.Version.props" Condition="'$(_SlangDxcToolchainSdkImported)' != 'true'" />
+
+    <Target Name="_SlangDxcToolchainRejectPackageReference" BeforeTargets="BeforeBuild" Condition="'$(_SlangDxcToolchainSdkImported)' != 'true'">
+        <Error Text="SlangDxcBundle.Toolchain $(SlangDxcToolchainVersion) is an MSBuild project SDK. Replace &lt;PackageReference Include=&quot;SlangDxcBundle.Toolchain&quot; /&gt; with &lt;Sdk Name=&quot;SlangDxcBundle.Toolchain&quot; Version=&quot;$(SlangDxcToolchainVersion)&quot; /&gt;, or reference SlangDxcBundle.Toolchain.&lt;rid&gt; for the build host directly." />
+    </Target>
+</Project>

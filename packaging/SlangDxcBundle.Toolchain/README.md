@@ -1,11 +1,35 @@
 # Unofficial Slang/DXC Toolchain Bundle
 
-Cross-platform build-host tooling from [Slang](https://github.com/shader-slang/slang), bundled with the source-built [DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler) library pinned by that Slang release.
+MSBuild project SDK that restores build-host tooling from [Slang](https://github.com/shader-slang/slang), bundled with the source-built [DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler) library pinned by that Slang release.
 
-The package contains expanded tool trees for Linux x64/ARM64, Windows x64, and macOS x64/ARM64. It exposes their common installation root through the transitive MSBuild property `SlangDxcToolchainRoot`.
+During restore, the SDK detects the build host and references the matching platform package pinned to its own version: `SlangDxcBundle.Toolchain.linux-x64`, `.linux-arm64`, `.win-x64`, `.osx-x64`, or `.osx-arm64`. Only that package (about 60 MB) is downloaded.
 
-The package does not select a platform or run any tools. Downstream build integration must select a build-host directory beneath the exposed root independently of the application target runtime.
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="2026.17.1" />
+</Project>
+```
 
-Package versions initially match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. Exact DXC versions, source revisions, and binary digests are recorded in each platform's `SLANG-DXC-BUNDLE.json`.
+The version can also live in `global.json`, in which case the project uses `<Sdk Name="SlangDxcBundle.Toolchain" />`:
 
-The packaging integration is MIT-licensed. The bundled binaries retain their upstream licenses and notices within every platform directory.
+```json
+{ "msbuild-sdks": { "SlangDxcBundle.Toolchain": "2026.17.1" } }
+```
+
+Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="2026.17.1" />` in its `Sdk.props` and the matching `Sdk.targets` import.
+
+The platform package exposes three transitive MSBuild properties:
+
+- `SlangDxcToolchainRoot`: the `tools/slang/` directory.
+- `SlangDxcToolchainPlatform`: the Slang platform name, such as `linux-x86_64`.
+- `SlangDxcToolchainDirectory`: the platform directory below the root, containing `bin/` and `lib/`.
+
+The SDK also exposes `SlangDxcToolchainVersion`. The packages do not run any tools. Downstream build integration selects and executes the compiler independently of the application target runtime.
+
+The platform package reference is private to the project that uses the SDK; it never becomes a dependency of a packed library. Central Package Management is supported; the SDK replaces any central entry for the platform package with its own pin.
+
+A `PackageReference` to this package fails the build with a migration message; the SDK must be referenced through the `<Sdk>` element or `global.json`. MSBuild resolves a named SDK once per build, so all projects in one build share the first resolved toolchain version.
+
+Package versions match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. Exact DXC versions, source revisions, and binary digests are recorded in each platform package's `SLANG-DXC-BUNDLE.json`.
+
+The packaging integration is MIT-licensed. The bundled binaries retain their upstream licenses and notices within every platform package.

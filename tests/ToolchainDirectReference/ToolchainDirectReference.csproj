@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <ToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">linux-x64</ToolchainHostRid>
+        <ToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">linux-arm64</ToolchainHostRid>
+        <ToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Windows')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">win-x64</ToolchainHostRid>
+        <ToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">osx-x64</ToolchainHostRid>
+        <ToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">osx-arm64</ToolchainHostRid>
+    </PropertyGroup>
+
+    <!-- A consumer that selects the build host itself needs no SDK. -->
+    <ItemGroup>
+        <PackageReference Include="SlangDxcBundle.Toolchain.$(ToolchainHostRid)" Version="[$(ToolchainPackageVersion)]" PrivateAssets="all" />
+    </ItemGroup>
+
+    <Target Name="ValidateToolchainProperties" BeforeTargets="CoreCompile">
+        <Error Text="The platform package did not expose SlangDxcToolchainRoot."
+               Condition="'$(SlangDxcToolchainRoot)' == ''" />
+        <Error Text="Expected build-host platform $(ExpectedSlangPlatform), got $(SlangDxcToolchainPlatform)."
+               Condition="'$(ExpectedSlangPlatform)' != '' And '$(ExpectedSlangPlatform)' != '$(SlangDxcToolchainPlatform)'" />
+        <Error Text="Toolchain directory does not exist: $(SlangDxcToolchainDirectory)"
+               Condition="!Exists('$(SlangDxcToolchainDirectory)')" />
+        <Error Text="The SDK must not be imported by a direct platform reference."
+               Condition="'$(_SlangDxcToolchainSdkImported)' == 'true'" />
+    </Target>
+
+</Project>

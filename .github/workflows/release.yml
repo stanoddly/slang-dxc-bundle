@@ -213,6 +213,7 @@ jobs:
           SLANG_TAG: ${{ needs.resolve.outputs.slang_tag }}
           DXC_TAG: ${{ needs.resolve.outputs.dxc_tag }}
           DXC_COMMIT: ${{ needs.resolve.outputs.dxc_commit }}
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
         run: |
           cat > release-notes.md <<EOF
           Unofficial Slang distribution bundles with source-built DXC support.
@@ -220,6 +221,7 @@ jobs:
           - Slang: [${SLANG_TAG}](https://github.com/shader-slang/slang/releases/tag/${SLANG_TAG})
           - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
           - DXC commit: \`${DXC_COMMIT}\`
+          - NuGet: MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} with one \`SlangDxcBundle.Toolchain.<rid>\` package per build host
 
           Each full archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every full archive passed a native DXIL Shader Model 6.0 compilation smoke test.
           EOF
@@ -374,7 +376,26 @@ jobs:
             )
           done
 
-      - name: Pack toolchain package
+      - name: Pack platform packages
+        env:
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          REPOSITORY_COMMIT: ${{ github.sha }}
+        run: |
+          while IFS=' ' read -r platform rid; do
+            dotnet pack packaging/SlangDxcBundle.Toolchain.Platform/SlangDxcBundle.Toolchain.Platform.csproj \
+              --configuration Release \
+              --output artifacts/packages \
+              --property:PackageVersion="$PACKAGE_VERSION" \
+              --property:Version="$PACKAGE_VERSION" \
+              --property:RepositoryCommit="$REPOSITORY_COMMIT" \
+              --property:ContinuousIntegrationBuild=true \
+              --property:ToolchainPlatform="$platform" \
+              --property:ToolchainRuntimeIdentifier="$rid" \
+              --property:ToolchainInputDirectory="$GITHUB_WORKSPACE/artifacts/toolchain-package/tools/slang/" \
+              -p:TreatWarningsAsErrors=true
+          done < <(python3 -c "import sys; sys.path.insert(0, 'scripts'); from toolchain_layout import RUNTIME_IDENTIFIERS; print('\n'.join(f'{p} {r}' for p, r in RUNTIME_IDENTIFIERS.items()))")
+
+      - name: Pack SDK package
         env:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
           REPOSITORY_COMMIT: ${{ github.sha }}
@@ -386,24 +407,34 @@ jobs:
           --property:Version=$PACKAGE_VERSION
           --property:RepositoryCommit=$REPOSITORY_COMMIT
           --property:ContinuousIntegrationBuild=true
-          --property:ToolchainInputDirectory=$GITHUB_WORKSPACE/artifacts/toolchain-package/tools/slang/
           -p:TreatWarningsAsErrors=true
 
-      - name: Verify toolchain package
+      - name: Verify packages
         env:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
           SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
           DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
         run: |
-          package="artifacts/packages/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg"
-          python3 scripts/verify_toolchain_package.py \
-            --package "$package" \
+          while IFS=' ' read -r platform rid; do
+            python3 scripts/verify_platform_package.py \
+              --package "artifacts/packages/SlangDxcBundle.Toolchain.$rid.$PACKAGE_VERSION.nupkg" \
+              --platform "$platform" \
+              --package-version "$PACKAGE_VERSION" \
+              --slang-version "$SLANG_VERSION" \
+              --dxc-version "$DXC_VERSION" \
+              --maximum-size 100000000
+          done < <(python3 -c "import sys; sys.path.insert(0, 'scripts'); from toolchain_layout import RUNTIME_IDENTIFIERS; print('\n'.join(f'{p} {r}' for p, r in RUNTIME_IDENTIFIERS.items()))")
+          python3 scripts/verify_sdk_package.py \
+            --package "artifacts/packages/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" \
             --package-version "$PACKAGE_VERSION" \
-            --slang-version "$SLANG_VERSION" \
-            --dxc-version "$DXC_VERSION" \
-            --maximum-size 240000000
+            --maximum-size 1000000
+          count=$(ls artifacts/packages/*.nupkg | wc -l)
+          if [[ "$count" -ne 6 ]]; then
+            echo "Expected 6 packages, found $count" >&2
+            exit 1
+          fi
 
-      - name: Upload toolchain package
+      - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
           name: nuget-package
@@ -444,105 +475,28 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download toolchain package
+      - name: Download packages
         uses: actions/download-artifact@v8
         with:
           name: nuget-package
           path: artifacts/package
 
-      - name: Pack transitive consumer dependency
+      # The feed is local and the network is blackholed, so every restore, including the SDK resolver, must be offline.
+      - name: Test packages as consumers
         shell: bash
         env:
-          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
-        run: |
-          dotnet pack tests/ToolchainConsumerDependency/ToolchainConsumerDependency.csproj \
-            --configuration Release \
-            --output artifacts/package \
-            --source "$GITHUB_WORKSPACE/artifacts/package" \
-            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
-            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
-            --property:NuGetAudit=false \
-            -p:TreatWarningsAsErrors=true
-
-      - name: Restore package consumer
-        shell: bash
-        env:
-          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
-          TARGET_RUNTIME: ${{ matrix.target_runtime }}
-        run: |
-          dotnet restore tests/ToolchainConsumer/ToolchainConsumer.csproj \
-            --source "$GITHUB_WORKSPACE/artifacts/package" \
-            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
-            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
-            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
-            --property:UseAppHost=false \
-            --property:SelfContained=false \
-            --property:NuGetAudit=false
-
-      - name: Verify passive and read-only package behavior
-        shell: bash
-        env:
+          PACKAGE_FEED: ${{ github.workspace }}/artifacts/package
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
           SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
           DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
           EXPECTED_PLATFORM: ${{ matrix.platform }}
           TARGET_RUNTIME: ${{ matrix.target_runtime }}
+          NUGET_PACKAGES: ${{ github.workspace }}/artifacts/restored-packages
           HTTP_PROXY: http://127.0.0.1:9
           HTTPS_PROXY: http://127.0.0.1:9
           ALL_PROXY: http://127.0.0.1:9
           NO_PROXY: ""
-        run: |
-          set -euo pipefail
-          package_root="$GITHUB_WORKSPACE/artifacts/restored-packages/slangdxcbundle.toolchain/$PACKAGE_VERSION/tools/slang"
-          if [[ "$RUNNER_OS" != "Windows" ]]; then
-            chmod -R a-w "$package_root"
-          fi
-          before=$(python3 scripts/verify_toolchain_installation.py \
-            --root "$package_root" \
-            --slang-version "$SLANG_VERSION" \
-            --dxc-version "$DXC_VERSION" \
-            --expected-platform "$EXPECTED_PLATFORM")
-
-          dotnet build tests/ToolchainConsumer/ToolchainConsumer.csproj \
-            --configuration Release \
-            --no-restore \
-            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
-            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
-            --property:ExpectedSlangPlatform="$EXPECTED_PLATFORM" \
-            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
-            --property:UseAppHost=false \
-            --property:SelfContained=false \
-            --property:RunToolchainSmoke=false \
-            -p:TreatWarningsAsErrors=true
-          if find tests/ToolchainConsumer/obj -name 'smoke.*' -print -quit | grep -q .; then
-            echo "Passive package build unexpectedly generated shader output" >&2
-            exit 1
-          fi
-
-          dotnet build tests/ToolchainConsumer/ToolchainConsumer.csproj \
-            --configuration Release \
-            --no-restore \
-            --property:ToolchainPackageVersion="$PACKAGE_VERSION" \
-            --property:RestorePackagesPath="$GITHUB_WORKSPACE/artifacts/restored-packages" \
-            --property:ExpectedSlangPlatform="$EXPECTED_PLATFORM" \
-            --property:RuntimeIdentifier="$TARGET_RUNTIME" \
-            --property:UseAppHost=false \
-            --property:SelfContained=false \
-            -p:TreatWarningsAsErrors=true
-
-          after=$(python3 scripts/verify_toolchain_installation.py \
-            --root "$package_root" \
-            --slang-version "$SLANG_VERSION" \
-            --dxc-version "$DXC_VERSION" \
-            --expected-platform "$EXPECTED_PLATFORM")
-          if [[ "$before" != "$after" ]]; then
-            echo "Package installation changed during the consumer build" >&2
-            exit 1
-          fi
-          if find tests/ToolchainConsumer/obj -type f \( -name slangc -o -name slangc.exe \) -print -quit | grep -q .; then
-            echo "Consumer build created a project-local toolchain installation" >&2
-            exit 1
-          fi
+        run: scripts/test_packages.sh
 
   publish-toolchain:
     needs: [resolve, toolchain, assemble-package, package-test]
@@ -557,7 +511,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download toolchain package
+      - name: Download packages
         uses: actions/download-artifact@v8
         with:
           name: nuget-package
@@ -570,13 +524,14 @@ jobs:
         with:
           user: stanoddly
 
-      - name: Publish toolchain package
+      # Platform packages go first so the SDK never points at a missing package; --skip-duplicate keeps reruns safe.
+      - name: Publish packages
         if: needs.resolve.outputs.toolchain_package_exists != 'true'
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
-        run: >-
-          dotnet nuget push
-          artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg
-          --api-key "$NUGET_API_KEY"
-          --source https://api.nuget.org/v3/index.json
+        run: |
+          for rid in linux-x64 linux-arm64 win-x64 osx-x64 osx-arm64; do
+            dotnet nuget push "artifacts/package/SlangDxcBundle.Toolchain.$rid.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+          dotnet nuget push "artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

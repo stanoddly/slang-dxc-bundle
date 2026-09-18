@@ -1,0 +1,25 @@
+<Project>
+    <Import Project="SlangDxcBundle.Toolchain.Version.props" />
+
+    <PropertyGroup>
+        <_SlangDxcToolchainSdkImported>true</_SlangDxcToolchainSdkImported>
+        <_SlangDxcToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">linux-x64</_SlangDxcToolchainHostRid>
+        <_SlangDxcToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">linux-arm64</_SlangDxcToolchainHostRid>
+        <_SlangDxcToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('Windows')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">win-x64</_SlangDxcToolchainHostRid>
+        <_SlangDxcToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">osx-x64</_SlangDxcToolchainHostRid>
+        <_SlangDxcToolchainHostRid Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">osx-arm64</_SlangDxcToolchainHostRid>
+        <_SlangDxcToolchainPackageId Condition="'$(_SlangDxcToolchainHostRid)' != ''">SlangDxcBundle.Toolchain.$(_SlangDxcToolchainHostRid)</_SlangDxcToolchainPackageId>
+    </PropertyGroup>
+
+    <!-- The platform package is a build-host tool of this project only; it must never become a nuspec dependency of a packed library. -->
+    <ItemGroup Condition="'$(_SlangDxcToolchainPackageId)' != '' And '$(ManagePackageVersionsCentrally)' != 'true'">
+        <PackageReference Include="$(_SlangDxcToolchainPackageId)" Version="[$(SlangDxcToolchainVersion)]" PrivateAssets="all" />
+    </ItemGroup>
+
+    <!-- Directory.Packages.props is already imported here; the SDK owns this pin, so an existing central entry is replaced instead of duplicated. -->
+    <ItemGroup Condition="'$(_SlangDxcToolchainPackageId)' != '' And '$(ManagePackageVersionsCentrally)' == 'true'">
+        <PackageVersion Remove="$(_SlangDxcToolchainPackageId)" />
+        <PackageVersion Include="$(_SlangDxcToolchainPackageId)" Version="[$(SlangDxcToolchainVersion)]" />
+        <PackageReference Include="$(_SlangDxcToolchainPackageId)" PrivateAssets="all" />
+    </ItemGroup>
+</Project>
