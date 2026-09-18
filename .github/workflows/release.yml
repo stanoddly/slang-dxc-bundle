@@ -221,7 +221,7 @@ jobs:
           - Slang: [${SLANG_TAG}](https://github.com/shader-slang/slang/releases/tag/${SLANG_TAG})
           - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
           - DXC commit: \`${DXC_COMMIT}\`
-          - NuGet: MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} with one \`SlangDxcBundle.Toolchain.<rid>\` package per build host
+          - NuGet: the slim tool trees ship as MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} plus one \`SlangDxcBundle.Toolchain.<rid>\` package per build host, published once every host has tested them
 
           Each full archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every full archive passed a native DXIL Shader Model 6.0 compilation smoke test.
           EOF
@@ -506,6 +506,8 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@v7
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -524,8 +526,8 @@ jobs:
         with:
           user: stanoddly
 
-      # Platform packages go first so the SDK never points at a missing package; --skip-duplicate keeps reruns safe.
-      - name: Publish packages
+      # nuget.org validates uploads asynchronously, so the SDK is pushed only once every platform package it pins is listed; --skip-duplicate keeps reruns safe.
+      - name: Publish platform packages
         if: needs.resolve.outputs.toolchain_package_exists != 'true'
         env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
@@ -534,4 +536,15 @@ jobs:
           for rid in linux-x64 linux-arm64 win-x64 osx-x64 osx-arm64; do
             dotnet nuget push "artifacts/package/SlangDxcBundle.Toolchain.$rid.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           done
-          dotnet nuget push "artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          python3 scripts/wait_for_platform_packages.py --package-version "$PACKAGE_VERSION"
+
+      - name: Publish SDK package
+        if: needs.resolve.outputs.toolchain_package_exists != 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+        run: >-
+          dotnet nuget push "artifacts/package/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg"
+          --api-key "$NUGET_API_KEY"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

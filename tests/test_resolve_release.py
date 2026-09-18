@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from resolve_release import missing_toolchain_packages, normalize_nuget_version
+from resolve_release import is_legacy_toolchain_version, missing_toolchain_packages, normalize_nuget_version
 from toolchain_layout import package_ids
 
 
@@ -67,6 +67,16 @@ class MissingToolchainPackagesTests(unittest.TestCase):
             missing_toolchain_packages("2026.15.0", lambda package_id, version: False),
             list(package_ids()),
         )
+
+
+class LegacyVersionTests(unittest.TestCase):
+    def test_last_legacy_version_and_everything_before_it_is_legacy(self) -> None:
+        for version in ("2026.18.0", "2026.17.1", "2026.14.1", "2025.99.9", "2026.18.0-rc.1"):
+            self.assertTrue(is_legacy_toolchain_version(version), version)
+
+    def test_later_versions_are_not_legacy(self) -> None:
+        for version in ("2026.18.0.1", "2026.18.1", "2026.19.0", "2027.1.0", "2026.19.0-rc.1"):
+            self.assertFalse(is_legacy_toolchain_version(version), version)
 
 
 if __name__ == "__main__":

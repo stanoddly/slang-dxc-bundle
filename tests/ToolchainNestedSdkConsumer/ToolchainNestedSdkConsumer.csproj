@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <Sdk Name="SlangDxcBundle.Toolchain.ConsumerTest.Sdk" Version="1.0.0" />
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    </PropertyGroup>
+
+    <Target Name="ValidateToolchainProperties" BeforeTargets="CoreCompile">
+        <Error Text="The consumer SDK was not imported."
+               Condition="'$(ConsumerTestSdkImported)' != 'true'" />
+        <Error Text="The toolchain package did not expose SlangDxcToolchainRoot."
+               Condition="'$(SlangDxcToolchainRoot)' == ''" />
+        <Error Text="Expected build-host platform $(ExpectedSlangPlatform), got $(SlangDxcToolchainPlatform)."
+               Condition="'$(ExpectedSlangPlatform)' != '' And '$(ExpectedSlangPlatform)' != '$(SlangDxcToolchainPlatform)'" />
+        <Error Text="Expected toolchain version $(ExpectedToolchainVersion), got $(SlangDxcToolchainVersion)."
+               Condition="'$(ExpectedToolchainVersion)' != '' And '$(ExpectedToolchainVersion)' != '$(SlangDxcToolchainVersion)'" />
+        <Error Text="Toolchain directory does not exist: $(SlangDxcToolchainDirectory)"
+               Condition="!Exists('$(SlangDxcToolchainDirectory)')" />
+    </Target>
+
+</Project>

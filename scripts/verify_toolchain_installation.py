@@ -28,38 +28,28 @@ def main() -> int:
             f"Toolchain root must contain only {arguments.platform}, found: "
             + ", ".join(platform_directories)
         )
-    for platform in (arguments.platform,):
-        platform_root = arguments.root / platform
-        if not platform_root.is_dir():
-            raise RuntimeError(f"Toolchain platform does not exist: {platform_root}")
-        for entry in binary_entries(platform, arguments.slang_version):
-            path = platform_root / Path(entry)
-            if not path.is_file():
-                raise RuntimeError(f"Toolchain file does not exist: {path}")
-        if not (platform_root / "LICENSE").is_file():
-            raise RuntimeError(
-                f"Toolchain license does not exist: {platform_root / 'LICENSE'}"
-            )
-        licenses = [
-            path for path in (platform_root / "LICENSES").rglob("*") if path.is_file()
-        ]
-        if not licenses:
-            raise RuntimeError(
-                f"Toolchain licenses do not exist: {platform_root / 'LICENSES'}"
-            )
-        manifest_path = platform_root / "SLANG-DXC-BUNDLE.json"
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except FileNotFoundError as error:
-            raise RuntimeError(
-                f"Toolchain manifest does not exist: {manifest_path}"
-            ) from error
-        if manifest.get("platform") != platform:
-            raise RuntimeError(f"{manifest_path} has the wrong platform")
-        if str(manifest["slang"]["tag"]).removeprefix("v") != arguments.slang_version:
-            raise RuntimeError(f"{manifest_path} has the wrong Slang version")
-        if str(manifest["dxc"]["tag"]).removeprefix("v") != arguments.dxc_version:
-            raise RuntimeError(f"{manifest_path} has the wrong DXC version")
+    platform = arguments.platform
+    platform_root = arguments.root / platform
+    for entry in binary_entries(platform, arguments.slang_version):
+        path = platform_root / Path(entry)
+        if not path.is_file():
+            raise RuntimeError(f"Toolchain file does not exist: {path}")
+    if not (platform_root / "LICENSE").is_file():
+        raise RuntimeError(f"Toolchain license does not exist: {platform_root / 'LICENSE'}")
+    licenses = [path for path in (platform_root / "LICENSES").rglob("*") if path.is_file()]
+    if not licenses:
+        raise RuntimeError(f"Toolchain licenses do not exist: {platform_root / 'LICENSES'}")
+    manifest_path = platform_root / "SLANG-DXC-BUNDLE.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise RuntimeError(f"Toolchain manifest does not exist: {manifest_path}") from error
+    if manifest.get("platform") != platform:
+        raise RuntimeError(f"{manifest_path} has the wrong platform")
+    if str(manifest["slang"]["tag"]).removeprefix("v") != arguments.slang_version:
+        raise RuntimeError(f"{manifest_path} has the wrong Slang version")
+    if str(manifest["dxc"]["tag"]).removeprefix("v") != arguments.dxc_version:
+        raise RuntimeError(f"{manifest_path} has the wrong DXC version")
 
     generated_caches = sorted(arguments.root.rglob("slang-glsl-module.bin"))
     if generated_caches:

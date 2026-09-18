@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <Sdk Name="SlangDxcBundle.Toolchain" />
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    </PropertyGroup>
+
+    <!-- A second platform package next to the SDK's own must fail the build. -->
+    <ItemGroup>
+        <PackageReference Include="SlangDxcBundle.Toolchain.$(ToolchainOtherRid)" Version="[$(ToolchainPackageVersion)]" PrivateAssets="all" />
+    </ItemGroup>
+
+</Project>

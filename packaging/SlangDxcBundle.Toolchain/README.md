@@ -6,19 +6,21 @@ During restore, the SDK detects the build host and references the matching platf
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="2026.17.1" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
 </Project>
 ```
 
 The version can also live in `global.json`, in which case the project uses `<Sdk Name="SlangDxcBundle.Toolchain" />`:
 
 ```json
-{ "msbuild-sdks": { "SlangDxcBundle.Toolchain": "2026.17.1" } }
+{ "msbuild-sdks": { "SlangDxcBundle.Toolchain": "<version>" } }
 ```
 
-Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="2026.17.1" />` in its `Sdk.props` and the matching `Sdk.targets` import.
+Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="<version>" />` in its `Sdk.props` and the matching `Sdk.targets` import.
 
-The platform package exposes three transitive MSBuild properties:
+Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that.
+
+The platform package exposes three MSBuild properties to the project that restores it:
 
 - `SlangDxcToolchainRoot`: the `tools/slang/` directory.
 - `SlangDxcToolchainPlatform`: the Slang platform name, such as `linux-x86_64`.
@@ -26,7 +28,7 @@ The platform package exposes three transitive MSBuild properties:
 
 The SDK also exposes `SlangDxcToolchainVersion`. The packages do not run any tools. Downstream build integration selects and executes the compiler independently of the application target runtime.
 
-The platform package reference is private to the project that uses the SDK; it never becomes a dependency of a packed library. Central Package Management is supported; the SDK replaces any central entry for the platform package with its own pin.
+The platform package reference is private to the project that uses the SDK; it never becomes a dependency of a packed library. Central Package Management is supported when `ManagePackageVersionsCentrally` is set in `Directory.Packages.props`; the SDK replaces any central entry for the platform package with its own pin.
 
 A `PackageReference` to this package fails the build with a migration message; the SDK must be referenced through the `<Sdk>` element or `global.json`. MSBuild resolves a named SDK once per build, so all projects in one build share the first resolved toolchain version.
 

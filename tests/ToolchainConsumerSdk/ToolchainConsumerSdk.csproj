@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Stands in for a downstream SDK such as Pixely that pins the toolchain for its own consumers. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <EnableDefaultItems>false</EnableDefaultItems>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <IsPackable>true</IsPackable>
+        <PackageId>SlangDxcBundle.Toolchain.ConsumerTest.Sdk</PackageId>
+        <PackageType>MSBuildSdk</PackageType>
+        <PackageVersion>1.0.0</PackageVersion>
+        <Authors>stanoddly</Authors>
+        <Description>Local-only MSBuild project SDK for testing a nested SlangDxcBundle.Toolchain import.</Description>
+        <NoPackageAnalysis>true</NoPackageAnalysis>
+        <ConsumerSdkVersionProps>$(BaseIntermediateOutputPath)ConsumerTest.Version.props</ConsumerSdkVersionProps>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="Sdk\Sdk.props" Pack="true" PackagePath="Sdk" />
+        <None Include="Sdk\Sdk.targets" Pack="true" PackagePath="Sdk" />
+        <None Include="$(ConsumerSdkVersionProps)" Pack="true" PackagePath="Sdk" />
+    </ItemGroup>
+
+    <Target Name="GenerateConsumerSdkVersionProps" BeforeTargets="_GetPackageFiles">
+        <Error Text="ToolchainPackageVersion is required." Condition="'$(ToolchainPackageVersion)' == ''" />
+        <WriteLinesToFile File="$(ConsumerSdkVersionProps)"
+                          Lines="&lt;Project&gt;;  &lt;PropertyGroup&gt;;    &lt;ConsumerTestToolchainVersion&gt;$(ToolchainPackageVersion)&lt;/ConsumerTestToolchainVersion&gt;;  &lt;/PropertyGroup&gt;;&lt;/Project&gt;"
+                          Overwrite="true"
+                          WriteOnlyWhenDifferent="true" />
+    </Target>
+
+</Project>

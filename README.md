@@ -39,19 +39,21 @@ Releases are named `slang-<Slang version>-dxc-<DXC version>`. Every bundle conta
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="2026.17.1" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
 </Project>
 ```
 
-The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="..." />`. A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves can reference a platform package directly.
+The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="<version>" />` (the `Version` attribute of `<Import>` expands properties; the `<Sdk>` element does not). A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves, for example on a host the SDK does not detect, can reference a platform package directly.
+
+Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that. The legacy versions stay on nuget.org unchanged.
 
 GitHub releases contain the full platform bundles; the slim tool trees are distributed only through the platform packages.
 
-The packages are passive. The platform package exposes the transitive MSBuild properties `SlangDxcToolchainRoot` (the `tools/slang/` directory), `SlangDxcToolchainPlatform` (the Slang platform name, such as `linux-x86_64`), and `SlangDxcToolchainDirectory` (the platform directory with `bin/` and `lib/`); the SDK exposes `SlangDxcToolchainVersion`. Downstream integrations execute the compiler independently of the application's target runtime identifier.
+The packages are passive. The platform package exposes the MSBuild properties `SlangDxcToolchainRoot` (the `tools/slang/` directory), `SlangDxcToolchainPlatform` (the Slang platform name, such as `linux-x86_64`), and `SlangDxcToolchainDirectory` (the platform directory with `bin/` and `lib/`) to the project that restores it; the SDK exposes `SlangDxcToolchainVersion`. Downstream integrations execute the compiler independently of the application's target runtime identifier.
 
-The platform package reference is private to the project that uses the SDK, so a packed library never lists the build host's toolchain as a dependency; each project that runs the compiler references the SDK itself. Central Package Management is supported; the SDK replaces any central entry for the platform package with its own pin. MSBuild resolves a named project SDK once per build, so all projects in one build share the first resolved toolchain version, and `packages.lock.json` records the build host's platform package.
+The platform package reference is private to the project that uses the SDK, so a packed library never lists the build host's toolchain as a dependency; each project that runs the compiler references the SDK itself. Central Package Management is supported when `ManagePackageVersionsCentrally` is set in `Directory.Packages.props`; the SDK replaces any central entry for the platform package with its own pin. MSBuild resolves a named project SDK once per build, so all projects in one build share the first resolved toolchain version (MSBuild warns with MSB4240 when versions differ), and `packages.lock.json` records the build host's platform package.
 
-The base package version is the NuGet-normalized Slang version, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections. Versions before the split are single `SlangDxcBundle.Toolchain` packages that contain all five platforms and are referenced with `PackageReference`.
+The base package version is the NuGet-normalized Slang version, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections.
 
 ## Automation
 

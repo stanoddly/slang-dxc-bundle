@@ -75,6 +75,16 @@ def main() -> int:
             if required_text not in sdk_props:
                 raise RuntimeError(f"Sdk.props is missing: {required_text}")
 
+        sdk_targets = package.read("Sdk/Sdk.targets").decode("utf-8")
+        for required_text in (
+            "does not support this build host",
+            "is not restored",
+            "More than one SlangDxcBundle.Toolchain platform package is restored",
+            "but this build host is",
+        ):
+            if required_text not in sdk_targets:
+                raise RuntimeError(f"Sdk.targets is missing the check: {required_text}")
+
         guard = package.read(guard_entry).decode("utf-8")
         if "is an MSBuild project SDK" not in guard or "'$(_SlangDxcToolchainSdkImported)' != 'true'" not in guard:
             raise RuntimeError("buildTransitive guard does not reject a PackageReference")

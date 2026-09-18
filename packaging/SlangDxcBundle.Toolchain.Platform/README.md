@@ -2,7 +2,7 @@
 
 Build-host tooling from [Slang](https://github.com/shader-slang/slang) for one host platform, bundled with the source-built [DirectX Shader Compiler](https://github.com/microsoft/DirectXShaderCompiler) library pinned by that Slang release.
 
-The package contains the expanded tool tree for its host platform under `tools/slang/<platform>/` and exposes three transitive MSBuild properties:
+The package contains the expanded tool tree for its host platform under `tools/slang/<platform>/` and exposes three MSBuild properties to the project that restores it:
 
 - `SlangDxcToolchainRoot`: the `tools/slang/` directory.
 - `SlangDxcToolchainPlatform`: the Slang platform name, such as `linux-x86_64`.
@@ -12,7 +12,7 @@ Most consumers should not reference this package directly. The [SlangDxcBundle.T
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="SlangDxcBundle.Toolchain" Version="2026.17.1" />
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="<version>" />
 </Project>
 ```
 
