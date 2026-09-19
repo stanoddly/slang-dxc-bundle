@@ -4,3 +4,6 @@ build/
 dist/
 bin/
 obj/
+tests/NuGet.Config
+tests/ToolchainExplicitVersion/
+tests/ToolchainNestedSdkConsumer/global.json

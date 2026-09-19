@@ -25,19 +25,39 @@ Releases are named `slang-<Slang version>-dxc-<DXC version>`. Every bundle conta
 - the DXC license and third-party notices;
 - `SLANG-DXC-BUNDLE.json` with source revisions and SHA-256 digests.
 
-## NuGet toolchain package
+## NuGet toolchain packages
 
-[SlangDxcBundle.Toolchain](https://www.nuget.org/packages/SlangDxcBundle.Toolchain) provides the slim build-host tool trees through NuGet restore. One package contains Linux x64/ARM64, Windows x64, and macOS x64/ARM64 under `tools/slang/{platform}`.
+[SlangDxcBundle.Toolchain](https://www.nuget.org/packages/SlangDxcBundle.Toolchain) is an MSBuild project SDK that restores the slim build-host tool tree for the machine that runs the build. During restore it references the platform package pinned to its own version, so a consumer downloads one tree of about 60 MB instead of all five:
 
-GitHub releases contain the full platform bundles; the slim tool trees are distributed only through the NuGet package.
+| Build host | Package |
+| --- | --- |
+| Linux x64 | `SlangDxcBundle.Toolchain.linux-x64` |
+| Linux ARM64 | `SlangDxcBundle.Toolchain.linux-arm64` |
+| Windows x64 | `SlangDxcBundle.Toolchain.win-x64` |
+| macOS x64 | `SlangDxcBundle.Toolchain.osx-x64` |
+| macOS ARM64 | `SlangDxcBundle.Toolchain.osx-arm64` |
 
-The package is passive. Its only build integration is the transitive MSBuild property `SlangDxcToolchainRoot`, which points to the common `tools/slang/` directory. Downstream integrations select and execute the appropriate build-host compiler independently of the application's target runtime identifier.
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="SlangDxcBundle.Toolchain" Version="x.y.z" />
+</Project>
+```
+
+The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` (the `Version` attribute of `<Import>` expands properties; the `<Sdk>` element does not). A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves, for example on a host the SDK does not detect, can reference a platform package directly.
+
+Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that. The legacy versions stay on nuget.org unchanged.
+
+GitHub releases contain the full platform bundles; the slim tool trees are distributed only through the platform packages.
+
+The packages are passive. The platform package exposes the MSBuild properties `SlangDxcToolchainRoot` (the `tools/slang/` directory), `SlangDxcToolchainPlatform` (the Slang platform name, such as `linux-x86_64`), and `SlangDxcToolchainDirectory` (the platform directory with `bin/` and `lib/`) to the project that restores it; the SDK exposes `SlangDxcToolchainVersion`. Downstream integrations execute the compiler independently of the application's target runtime identifier.
+
+The platform package reference is private to the project that uses the SDK, so a packed library never lists the build host's toolchain as a dependency; each project that runs the compiler references the SDK itself. Central Package Management is supported when `ManagePackageVersionsCentrally` is set in `Directory.Packages.props`; the SDK replaces any central entry for the platform package with its own pin. MSBuild resolves a named project SDK once per build, so all projects in one build share the first resolved toolchain version (MSBuild warns with MSB4240 when versions differ), and `packages.lock.json` records the build host's platform package.
 
 The base package version is the NuGet-normalized Slang version, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. The exact DXC version and source commit remain recorded in each `SLANG-DXC-BUNDLE.json`; a fourth NuGet version component is reserved for packaging-only corrections.
 
 ## Automation
 
-[`release.yml`](.github/workflows/release.yml) checks the latest stable Slang release every six hours. If its corresponding bundle release does not exist, the workflow builds and tests all supported platforms before publishing it. If the corresponding NuGet package version is missing, the workflow prepares and tests the slim tool trees on every supported build host before publishing the package.
+[`release.yml`](.github/workflows/release.yml) checks the latest stable Slang release every six hours. If its corresponding bundle release does not exist, the workflow builds and tests all supported platforms before publishing it. If any of the six NuGet packages is missing for that version, the workflow prepares the slim tool trees, packs the platform packages and the SDK, tests them as consumers on every supported build host, and publishes them.
 
 The workflow can also be started manually with a specific Slang tag. A `repository_dispatch` event of type `slang-release` may provide the tag as `client_payload.slang_tag` for external webhook integrations.
 

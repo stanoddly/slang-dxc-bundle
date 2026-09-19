@@ -7,39 +7,38 @@
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
         <IsPackable>true</IsPackable>
         <PackageId>SlangDxcBundle.Toolchain</PackageId>
+        <PackageType>MSBuildSdk</PackageType>
         <Title>Unofficial Slang/DXC Toolchain Bundle</Title>
         <PackageVersion Condition="'$(PackageVersion)' == ''">0.0.0-local</PackageVersion>
         <Authors>stanoddly</Authors>
-        <Description>Unofficial cross-platform Slang compiler build-host tooling with source-built DXC support.</Description>
+        <Description>MSBuild project SDK that restores the unofficial Slang compiler build-host tooling with source-built DXC support for the current build host.</Description>
         <PackageLicenseFile>PACKAGE-LICENSE.txt</PackageLicenseFile>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-        <PackageTags>slang;dxc;shader;compiler;build;unofficial</PackageTags>
+        <PackageTags>slang;dxc;shader;compiler;build;msbuild-sdk;unofficial</PackageTags>
         <PackageProjectUrl>https://github.com/stanoddly/slang-dxc-bundle</PackageProjectUrl>
         <RepositoryUrl>https://github.com/stanoddly/slang-dxc-bundle</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <MinClientVersion>5.0.0</MinClientVersion>
-        <ToolchainInputDirectory Condition="'$(ToolchainInputDirectory)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'build', 'toolchain-package', 'tools', 'slang'))</ToolchainInputDirectory>
+        <ToolchainVersionProps>$(BaseIntermediateOutputPath)SlangDxcBundle.Toolchain.Version.props</ToolchainVersionProps>
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="buildTransitive\SlangDxcBundle.Toolchain.props"
-              Pack="true"
-              PackagePath="buildTransitive" />
+        <None Include="Sdk\Sdk.props" Pack="true" PackagePath="Sdk" />
+        <None Include="Sdk\Sdk.targets" Pack="true" PackagePath="Sdk" />
+        <None Include="$(ToolchainVersionProps)" Pack="true" PackagePath="Sdk" />
+        <None Include="buildTransitive\SlangDxcBundle.Toolchain.targets" Pack="true" PackagePath="buildTransitive" />
         <None Include="README.md" Pack="true" PackagePath="\" />
         <None Include="PACKAGE-LICENSE.txt" Pack="true" PackagePath="\" />
         <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
-        <_ToolchainFile Include="$(ToolchainInputDirectory)**\*" />
-        <None Include="$(ToolchainInputDirectory)**\*"
-              Pack="true"
-              PackagePath="tools\slang" />
     </ItemGroup>
 
-    <Target Name="ValidateToolchainPackageInputs" BeforeTargets="GenerateNuspec">
-        <Error Text="Toolchain input directory does not exist: $(ToolchainInputDirectory)"
-               Condition="!Exists('$(ToolchainInputDirectory)')" />
-        <Error Text="Toolchain input directory is empty: $(ToolchainInputDirectory)"
-               Condition="'@(_ToolchainFile)' == ''" />
+    <!-- The SDK pins the platform packages to its own version, which only the pack knows. -->
+    <Target Name="GenerateToolchainVersionProps" BeforeTargets="_GetPackageFiles">
+        <WriteLinesToFile File="$(ToolchainVersionProps)"
+                          Lines="&lt;Project&gt;;  &lt;PropertyGroup&gt;;    &lt;SlangDxcToolchainVersion&gt;$(PackageVersion)&lt;/SlangDxcToolchainVersion&gt;;  &lt;/PropertyGroup&gt;;&lt;/Project&gt;"
+                          Overwrite="true"
+                          WriteOnlyWhenDifferent="true" />
     </Target>
 
 </Project>

@@ -1,0 +1,14 @@
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    </PropertyGroup>
+
+    <!-- Stale central pins that the SDK must replace instead of duplicating. -->
+    <ItemGroup>
+        <PackageVersion Include="SlangDxcBundle.Toolchain.linux-x64" Version="0.0.1" />
+        <PackageVersion Include="SlangDxcBundle.Toolchain.linux-arm64" Version="0.0.1" />
+        <PackageVersion Include="SlangDxcBundle.Toolchain.win-x64" Version="0.0.1" />
+        <PackageVersion Include="SlangDxcBundle.Toolchain.osx-x64" Version="0.0.1" />
+        <PackageVersion Include="SlangDxcBundle.Toolchain.osx-arm64" Version="0.0.1" />
+    </ItemGroup>
+</Project>

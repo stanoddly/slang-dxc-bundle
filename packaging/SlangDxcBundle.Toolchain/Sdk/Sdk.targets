@@ -1,0 +1,14 @@
+<Project>
+    <Target Name="_SlangDxcToolchainValidateHost" BeforeTargets="CollectPackageReferences;BeforeBuild" Condition="'$(_SlangDxcToolchainHostRid)' == ''">
+        <Error Text="SlangDxcBundle.Toolchain $(SlangDxcToolchainVersion) does not support this build host. Supported: Linux x64, Linux ARM64, Windows x64, macOS x64, macOS ARM64." />
+    </Target>
+
+    <Target Name="_SlangDxcToolchainValidateRestore" BeforeTargets="BeforeBuild" Condition="'$(_SlangDxcToolchainHostRid)' != ''">
+        <Error Text="$(_SlangDxcToolchainPackageId) $(SlangDxcToolchainVersion) is not restored. Restore on this build host with a feed that provides the SlangDxcBundle.Toolchain platform packages."
+               Condition="'$(SlangDxcToolchainRoot)' == ''" />
+        <Error Text="More than one SlangDxcBundle.Toolchain platform package is restored: @(SlangDxcToolchainPackage). Remove direct platform package references when using the SDK."
+               Condition="@(SlangDxcToolchainPackage->Count()) &gt; 1" />
+        <Error Text="The restored toolchain serves @(SlangDxcToolchainPackage) but this build host is $(_SlangDxcToolchainHostRid). Restore on this build host."
+               Condition="@(SlangDxcToolchainPackage->Count()) == 1 And '@(SlangDxcToolchainPackage)' != '$(_SlangDxcToolchainHostRid)'" />
+    </Target>
+</Project>

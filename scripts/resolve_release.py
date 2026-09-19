@@ -8,18 +8,14 @@ import sys
 import urllib.error
 import urllib.request
 
+from toolchain_layout import PLATFORMS, package_ids
+
 
 GITHUB_API_URL = "https://api.github.com"
 NUGET_FLAT_CONTAINER_URL = "https://api.nuget.org/v3-flatcontainer"
-TOOLCHAIN_PACKAGE_ID = "SlangDxcBundle.Toolchain"
 SLANG_REPOSITORY = "shader-slang/slang"
-PLATFORMS = (
-    "windows-x86_64",
-    "linux-x86_64",
-    "linux-aarch64",
-    "macos-x86_64",
-    "macos-aarch64",
-)
+# Versions up to this one are single all-platform packages under the SDK's ID; nuget.org versions are immutable, so they stay legacy.
+LAST_LEGACY_VERSION = "2026.18.0"
 
 
 def request_json(url: str, token: str) -> dict:
@@ -76,6 +72,23 @@ def nuget_package_exists(package_id: str, version: str) -> bool:
 
     versions = {str(value).lower() for value in response.get("versions", [])}
     return version.lower() in versions
+
+
+def missing_toolchain_packages(version: str, package_exists=nuget_package_exists) -> list[str]:
+    return [package_id for package_id in package_ids() if not package_exists(package_id, version)]
+
+
+def nuget_version_key(version: str) -> tuple:
+    numeric, _, prerelease = version.partition("-")
+    components = [int(component) for component in numeric.split(".")]
+    while len(components) < 4:
+        components.append(0)
+    # A prerelease sorts below its release; an empty marker ranks highest.
+    return (tuple(components), prerelease == "", prerelease)
+
+
+def is_legacy_toolchain_version(version: str) -> bool:
+    return nuget_version_key(version) <= nuget_version_key(LAST_LEGACY_VERSION)
 
 
 def normalize_nuget_version(version: str) -> str:
@@ -174,12 +187,20 @@ def main() -> int:
             )
 
     toolchain_package_version = normalize_nuget_version(slang_version)
-    toolchain_package_exists = nuget_package_exists(
-        TOOLCHAIN_PACKAGE_ID,
-        toolchain_package_version,
+    toolchain_version_is_legacy = is_legacy_toolchain_version(toolchain_package_version)
+    missing_packages = (
+        [] if toolchain_version_is_legacy else missing_toolchain_packages(toolchain_package_version)
     )
+    # A legacy version counts as handled whether or not it was ever published; the legacy layout is no longer built.
+    toolchain_package_exists = not missing_packages
     should_build_bundle = not bundle_release_exists
     should_prepare_toolchain = not toolchain_package_exists
+    if toolchain_version_is_legacy:
+        print(
+            f"Toolchain package version {toolchain_package_version} belongs to the legacy single-package layout, "
+            f"which is no longer built; the SDK layout starts after {LAST_LEGACY_VERSION}",
+            file=sys.stderr,
+        )
 
     write_output("should_build_bundle", str(should_build_bundle).lower())
     write_output("should_prepare_toolchain", str(should_prepare_toolchain).lower())
@@ -199,6 +220,8 @@ def main() -> int:
                 "should_prepare_toolchain": should_prepare_toolchain,
                 "toolchain_package_exists": toolchain_package_exists,
                 "toolchain_package_version": toolchain_package_version,
+                "missing_toolchain_packages": missing_packages,
+                "toolchain_version_is_legacy": toolchain_version_is_legacy,
                 "slang_tag": slang_tag,
                 "dxc_tag": dxc_tag,
                 "dxc_commit": dxc_commit,

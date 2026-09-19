@@ -1,0 +1,7 @@
+<Project>
+    <Import Project="ConsumerTest.Version.props" />
+    <Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="$(ConsumerTestToolchainVersion)" />
+    <PropertyGroup>
+        <ConsumerTestSdkImported>true</ConsumerTestSdkImported>
+    </PropertyGroup>
+</Project>
