@@ -1,16 +1,18 @@
 name: Release Slang with DXC
 
+# Releases the Slang version pinned in release.json. The schedule retries a release that did not complete.
 on:
   schedule:
     - cron: "23 */6 * * *"
   workflow_dispatch:
-    inputs:
-      slang_tag:
-        description: Slang release tag; leave empty for the latest stable release
-        required: false
-        type: string
-  repository_dispatch:
-    types: [slang-release]
+  push:
+    branches: [main]
+    # Mirrors RELEASE_PATHS in scripts/resolve_release.py.
+    paths:
+      - release.json
+      - packaging/**
+      - scripts/**
+      - .github/workflows/release.yml
 
 permissions:
   contents: read
@@ -27,28 +29,27 @@ jobs:
       should_prepare_toolchain: ${{ steps.release.outputs.should_prepare_toolchain }}
       toolchain_package_exists: ${{ steps.release.outputs.toolchain_package_exists }}
       toolchain_package_version: ${{ steps.release.outputs.toolchain_package_version }}
+      toolchain_package_full_version: ${{ steps.release.outputs.toolchain_package_full_version }}
+      revision: ${{ steps.release.outputs.revision }}
+      release_commit: ${{ steps.release.outputs.release_commit }}
       slang_tag: ${{ steps.release.outputs.slang_tag }}
       slang_version: ${{ steps.release.outputs.slang_version }}
       dxc_tag: ${{ steps.release.outputs.dxc_tag }}
       dxc_version: ${{ steps.release.outputs.dxc_version }}
       dxc_commit: ${{ steps.release.outputs.dxc_commit }}
+      bundle_name: ${{ steps.release.outputs.bundle_name }}
       bundle_tag: ${{ steps.release.outputs.bundle_tag }}
     steps:
+      # The release revision is the git height, which needs the full history.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Resolve upstream releases
         id: release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          MANUAL_SLANG_TAG: ${{ inputs.slang_tag }}
-          DISPATCH_SLANG_TAG: ${{ github.event.client_payload.slang_tag }}
-        run: |
-          slang_tag="${MANUAL_SLANG_TAG:-$DISPATCH_SLANG_TAG}"
-          arguments=(--repository "$GITHUB_REPOSITORY")
-          if [[ -n "$slang_tag" ]]; then
-            arguments+=(--slang-tag "$slang_tag")
-          fi
-          python3 scripts/resolve_release.py "${arguments[@]}"
+        run: python3 scripts/resolve_release.py --repository "$GITHUB_REPOSITORY"
 
   build:
     needs: resolve
@@ -87,6 +88,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.release_commit }}
 
       - name: Check out DXC source
         uses: actions/checkout@v7
@@ -214,6 +217,8 @@ jobs:
           DXC_TAG: ${{ needs.resolve.outputs.dxc_tag }}
           DXC_COMMIT: ${{ needs.resolve.outputs.dxc_commit }}
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          REVISION: ${{ needs.resolve.outputs.revision }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.release_commit }}
         run: |
           cat > release-notes.md <<EOF
           Unofficial Slang distribution bundles with source-built DXC support.
@@ -221,6 +226,7 @@ jobs:
           - Slang: [${SLANG_TAG}](https://github.com/shader-slang/slang/releases/tag/${SLANG_TAG})
           - DXC: [${DXC_TAG}](https://github.com/microsoft/DirectXShaderCompiler/tree/${DXC_COMMIT})
           - DXC commit: \`${DXC_COMMIT}\`
+          - Packaging revision: ${REVISION}, built from \`${RELEASE_COMMIT}\`
           - NuGet: the slim tool trees ship as MSBuild project SDK \`SlangDxcBundle.Toolchain\` ${PACKAGE_VERSION} plus one \`SlangDxcBundle.Toolchain.<rid>\` package per build host, published once every host has tested them; reference it with \`<Sdk Name="SlangDxcBundle.Toolchain" Version="${PACKAGE_VERSION}" />\` instead of a \`PackageReference\` (versions up to 2026.18.0)
 
           Each full archive preserves the official Slang distribution and adds only the platform's \`dxcompiler\` library, DXC license material, and a bundle manifest. Every full archive passed a native DXIL Shader Model 6.0 compilation smoke test.
@@ -230,13 +236,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+          RELEASE_COMMIT: ${{ needs.resolve.outputs.release_commit }}
         run: |
           gh release create "$BUNDLE_TAG" \
             dist/*.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "$BUNDLE_TAG" \
             --notes-file release-notes.md \
-            --target "$GITHUB_SHA" \
+            --target "$RELEASE_COMMIT" \
             --latest
 
   toolchain:
@@ -273,27 +280,30 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.release_commit }}
 
       - name: Download full bundle
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+          BUNDLE_NAME: ${{ needs.resolve.outputs.bundle_name }}
         run: |
           mkdir source
           gh release download "$BUNDLE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "$BUNDLE_TAG-${{ matrix.platform }}.zip" \
+            --pattern "$BUNDLE_NAME-${{ matrix.platform }}.zip" \
             --dir source
 
       - name: Package slim toolchain
         shell: bash
         env:
-          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+          BUNDLE_NAME: ${{ needs.resolve.outputs.bundle_name }}
           SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
         run: |
           python3 scripts/package_toolchain.py \
-            --bundle "source/$BUNDLE_TAG-${{ matrix.platform }}.zip" \
+            --bundle "source/$BUNDLE_NAME-${{ matrix.platform }}.zip" \
             --slang-version "$SLANG_VERSION" \
             --platform "${{ matrix.platform }}" \
             --output-directory dist
@@ -301,9 +311,9 @@ jobs:
       - name: Extract slim toolchain
         shell: bash
         env:
-          BUNDLE_TAG: ${{ needs.resolve.outputs.bundle_tag }}
+          BUNDLE_NAME: ${{ needs.resolve.outputs.bundle_name }}
         run: |
-          archive="$GITHUB_WORKSPACE/dist/$BUNDLE_TAG-toolchain-${{ matrix.platform }}.zip"
+          archive="$GITHUB_WORKSPACE/dist/$BUNDLE_NAME-toolchain-${{ matrix.platform }}.zip"
           mkdir -p smoke/toolchain smoke/work
           (
             cd smoke/toolchain
@@ -343,11 +353,13 @@ jobs:
 
   assemble-package:
     needs: [resolve, toolchain]
-    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    if: "!cancelled() && needs.toolchain.result == 'success'"
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.release_commit }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -379,13 +391,14 @@ jobs:
       - name: Pack platform packages
         env:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
-          REPOSITORY_COMMIT: ${{ github.sha }}
+          PACKAGE_FULL_VERSION: ${{ needs.resolve.outputs.toolchain_package_full_version }}
+          REPOSITORY_COMMIT: ${{ needs.resolve.outputs.release_commit }}
         run: |
           while IFS=' ' read -r platform rid; do
             dotnet pack packaging/SlangDxcBundle.Toolchain.Platform/SlangDxcBundle.Toolchain.Platform.csproj \
               --configuration Release \
               --output artifacts/packages \
-              --property:PackageVersion="$PACKAGE_VERSION" \
+              --property:PackageVersion="$PACKAGE_FULL_VERSION" \
               --property:Version="$PACKAGE_VERSION" \
               --property:RepositoryCommit="$REPOSITORY_COMMIT" \
               --property:ContinuousIntegrationBuild=true \
@@ -398,12 +411,13 @@ jobs:
       - name: Pack SDK package
         env:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
-          REPOSITORY_COMMIT: ${{ github.sha }}
+          PACKAGE_FULL_VERSION: ${{ needs.resolve.outputs.toolchain_package_full_version }}
+          REPOSITORY_COMMIT: ${{ needs.resolve.outputs.release_commit }}
         run: >-
           dotnet pack packaging/SlangDxcBundle.Toolchain/SlangDxcBundle.Toolchain.csproj
           --configuration Release
           --output artifacts/packages
-          --property:PackageVersion=$PACKAGE_VERSION
+          --property:PackageVersion=$PACKAGE_FULL_VERSION
           --property:Version=$PACKAGE_VERSION
           --property:RepositoryCommit=$REPOSITORY_COMMIT
           --property:ContinuousIntegrationBuild=true
@@ -412,6 +426,7 @@ jobs:
       - name: Verify packages
         env:
           PACKAGE_VERSION: ${{ needs.resolve.outputs.toolchain_package_version }}
+          PACKAGE_FULL_VERSION: ${{ needs.resolve.outputs.toolchain_package_full_version }}
           SLANG_VERSION: ${{ needs.resolve.outputs.slang_version }}
           DXC_VERSION: ${{ needs.resolve.outputs.dxc_version }}
         run: |
@@ -419,14 +434,14 @@ jobs:
             python3 scripts/verify_platform_package.py \
               --package "artifacts/packages/SlangDxcBundle.Toolchain.$rid.$PACKAGE_VERSION.nupkg" \
               --platform "$platform" \
-              --package-version "$PACKAGE_VERSION" \
+              --package-version "$PACKAGE_FULL_VERSION" \
               --slang-version "$SLANG_VERSION" \
               --dxc-version "$DXC_VERSION" \
               --maximum-size 100000000
           done < <(python3 -c "import sys; sys.path.insert(0, 'scripts'); from toolchain_layout import RUNTIME_IDENTIFIERS; print('\n'.join(f'{p} {r}' for p, r in RUNTIME_IDENTIFIERS.items()))")
           python3 scripts/verify_sdk_package.py \
             --package "artifacts/packages/SlangDxcBundle.Toolchain.$PACKAGE_VERSION.nupkg" \
-            --package-version "$PACKAGE_VERSION" \
+            --package-version "$PACKAGE_FULL_VERSION" \
             --maximum-size 1000000
           count=$(ls artifacts/packages/*.nupkg | wc -l)
           if [[ "$count" -ne 6 ]]; then
@@ -444,7 +459,7 @@ jobs:
 
   package-test:
     needs: [resolve, assemble-package]
-    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    if: "!cancelled() && needs.assemble-package.result == 'success'"
     name: Package ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -469,6 +484,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.release_commit }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -500,7 +517,7 @@ jobs:
 
   publish-toolchain:
     needs: [resolve, toolchain, assemble-package, package-test]
-    if: needs.resolve.outputs.should_prepare_toolchain == 'true'
+    if: "!cancelled() && needs.package-test.result == 'success'"
     runs-on: ubuntu-24.04
     # Leaves room for the 30 minute platform package availability wait.
     timeout-minutes: 45
@@ -508,6 +525,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.release_commit }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6

@@ -11,8 +11,9 @@ target_runtime="${TARGET_RUNTIME:-win-x64}"
 export NUGET_PACKAGES="${NUGET_PACKAGES:-$repository/build/test-packages}"
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
-host_rid="$(python3 -c "import sys; sys.path.insert(0, '$repository/scripts'); from toolchain_layout import RUNTIME_IDENTIFIERS; print(RUNTIME_IDENTIFIERS['$EXPECTED_PLATFORM'])")"
-other_rid="$(python3 -c "import sys; sys.path.insert(0, '$repository/scripts'); from toolchain_layout import RUNTIME_IDENTIFIERS; print(next(r for r in RUNTIME_IDENTIFIERS.values() if r != '$host_rid'))")"
+# python3 -c imports from the working directory; a Git Bash path inside the code string does not resolve on Windows.
+host_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(RUNTIME_IDENTIFIERS['$EXPECTED_PLATFORM'])")"
+other_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(next(r for r in RUNTIME_IDENTIFIERS.values() if r != '$host_rid'))")"
 package_root="$NUGET_PACKAGES/slangdxcbundle.toolchain.$host_rid/$PACKAGE_VERSION/tools/slang"
 windows_host=false
 if [[ "${RUNNER_OS:-$(uname -s)}" == "Windows" ]]; then

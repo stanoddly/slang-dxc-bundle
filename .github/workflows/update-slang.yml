@@ -1,0 +1,65 @@
+name: Update Slang
+
+# Pins a new Slang release in release.json through a squash-merged PR, then starts the release for it.
+on:
+  schedule:
+    - cron: "7 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      slang_tag:
+        description: Slang release tag to pin; leave empty for the latest stable release
+        required: false
+        type: string
+  repository_dispatch:
+    types: [slang-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slang-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pin Slang release
+        id: pin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MANUAL_SLANG_TAG: ${{ inputs.slang_tag }}
+          DISPATCH_SLANG_TAG: ${{ github.event.client_payload.slang_tag }}
+        run: |
+          slang_tag="${MANUAL_SLANG_TAG:-$DISPATCH_SLANG_TAG}"
+          arguments=()
+          if [[ -n "$slang_tag" ]]; then
+            arguments+=(--slang-tag "$slang_tag")
+          fi
+          python3 scripts/update_slang.py "${arguments[@]}"
+
+      # Pushes and merges made with GITHUB_TOKEN start no workflow runs, so the release is dispatched explicitly.
+      - name: Merge pin and start release
+        if: steps.pin.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLANG_TAG: ${{ steps.pin.outputs.slang_tag }}
+        run: |
+          branch="update-slang/$SLANG_TAG"
+          if [[ "$(gh pr view "$branch" --json state --jq .state 2>/dev/null)" != "OPEN" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git switch --create "$branch"
+            git commit --all --message "Update Slang to $SLANG_TAG"
+            git push origin "$branch"
+            gh pr create --base main --head "$branch" --title "Update Slang to $SLANG_TAG" \
+              --body "Pins Slang [$SLANG_TAG](https://github.com/shader-slang/slang/releases/tag/$SLANG_TAG) in \`release.json\`."
+          fi
+          gh pr merge "$branch" --squash --delete-branch
+          gh workflow run release.yml --ref main
