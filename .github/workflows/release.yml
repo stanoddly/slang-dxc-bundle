@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   resolve:
+    # A run started from another branch would release or merge unreviewed code.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       should_build_bundle: ${{ steps.release.outputs.should_build_bundle }}

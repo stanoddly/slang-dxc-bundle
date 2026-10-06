@@ -80,14 +80,18 @@ def git(repository_root: Path, *arguments: str) -> str:
     return subprocess.run(["git", "-C", str(repository_root), *arguments], check=True, capture_output=True, text=True).stdout.strip()
 
 
-# Git height: commits touching the release paths since the pin last changed, counting the pin commit as 1; also returns the last such commit.
+# Git height: commits touching the release paths since the pin first named the current Slang tag, counting that commit as 1; also returns the last such commit.
+# Counting from the first pin keeps revisions rising when the pin returns to an earlier tag, so a released version is never reused.
 def release_revision(repository_root: Path = REPOSITORY_ROOT) -> tuple[int, str]:
     if git(repository_root, "rev-parse", "--is-shallow-repository") == "true":
         raise RuntimeError("The release revision needs the full history; check out with fetch-depth: 0")
 
-    pin_commit = git(repository_root, "log", "-1", "--format=%H", "--", PIN_FILE)
-    if not pin_commit:
-        raise RuntimeError(f"{PIN_FILE} has no commit")
+    def pinned_tag(commit: str) -> str:
+        return json.loads(git(repository_root, "show", f"{commit}:{PIN_FILE}"))["slang_tag"]
+
+    slang_tag = pinned_tag("HEAD")
+    pin_commits = git(repository_root, "log", "--reverse", "--diff-filter=d", "--format=%H", "--", PIN_FILE).splitlines()
+    pin_commit = next(commit for commit in pin_commits if pinned_tag(commit) == slang_tag)
     release_commit = git(repository_root, "log", "-1", "--format=%H", "--", *RELEASE_PATHS)
     height = int(git(repository_root, "rev-list", "--count", f"{pin_commit}..{release_commit}", "--", *RELEASE_PATHS))
     return height + 1, release_commit

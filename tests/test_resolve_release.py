@@ -147,6 +147,14 @@ class ReleaseRevisionTests(unittest.TestCase):
         pin_commit = self.commit("release.json", '{"slang_tag": "v2026.20"}')
         self.assertEqual(release_revision(self.repository), (1, pin_commit))
 
+    def test_returning_to_an_earlier_pin_continues_its_revisions(self) -> None:
+        self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        self.commit("scripts/file.py", "1")
+        self.commit("release.json", '{"slang_tag": "v2026.20"}')
+        self.commit("scripts/file.py", "2")
+        pin_commit = self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        self.assertEqual(release_revision(self.repository), (5, pin_commit))
+
     def test_rejects_a_shallow_clone(self) -> None:
         self.commit("release.json", '{"slang_tag": "v2026.19"}')
         self.commit("scripts/file.py", "1")
