@@ -12,8 +12,9 @@ export NUGET_PACKAGES="${NUGET_PACKAGES:-$repository/build/test-packages}"
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 
 # python3 -c imports from the working directory; a Git Bash path inside the code string does not resolve on Windows.
-host_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(RUNTIME_IDENTIFIERS['$EXPECTED_PLATFORM'])")"
-other_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(next(r for r in RUNTIME_IDENTIFIERS.values() if r != '$host_rid'))")"
+# Without a trailing newline, Windows Python leaves no carriage return for command substitution to keep.
+host_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(RUNTIME_IDENTIFIERS['$EXPECTED_PLATFORM'], end='')")"
+other_rid="$(cd "$repository/scripts" && python3 -c "from toolchain_layout import RUNTIME_IDENTIFIERS; print(next(r for r in RUNTIME_IDENTIFIERS.values() if r != '$host_rid'), end='')")"
 package_root="$NUGET_PACKAGES/slangdxcbundle.toolchain.$host_rid/$PACKAGE_VERSION/tools/slang"
 windows_host=false
 if [[ "${RUNNER_OS:-$(uname -s)}" == "Windows" ]]; then

@@ -10,7 +10,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from resolve_release import (
-    is_legacy_toolchain_version,
     missing_toolchain_packages,
     normalize_nuget_version,
     release_revision,
@@ -78,16 +77,6 @@ class MissingToolchainPackagesTests(unittest.TestCase):
         )
 
 
-class LegacyVersionTests(unittest.TestCase):
-    def test_last_legacy_version_and_everything_before_it_is_legacy(self) -> None:
-        for version in ("2026.18.0", "2026.17.1", "2026.14.1", "2025.99.9", "2026.18.0-rc.1"):
-            self.assertTrue(is_legacy_toolchain_version(version), version)
-
-    def test_later_versions_are_not_legacy(self) -> None:
-        for version in ("2026.18.0.1", "2026.18.1", "2026.19.0", "2027.1.0", "2026.19.0-rc.1"):
-            self.assertFalse(is_legacy_toolchain_version(version), version)
-
-
 class ToolchainPackageVersionTests(unittest.TestCase):
     def test_appends_the_revision_to_a_two_component_slang_version(self) -> None:
         self.assertEqual(toolchain_package_version("2026.19", 1), "2026.19.0.1")
@@ -130,16 +119,16 @@ class ReleaseRevisionTests(unittest.TestCase):
         self.commit("release.json", '{"slang_tag": "v2026.19"}')
         packaging_commit = self.commit("packaging/file.txt", "1")
         self.commit("README.md", "docs")
-        self.commit("tests/file.txt", "test")
+        self.commit(".github/workflows/update-slang.yml", "1")
         self.assertEqual(release_revision(self.repository), (2, packaging_commit))
 
     def test_counts_every_release_path(self) -> None:
         self.commit("release.json", '{"slang_tag": "v2026.19"}')
         self.commit("packaging/file.txt", "1")
         self.commit("scripts/file.py", "1")
+        self.commit("tests/file.txt", "1")
         workflow_commit = self.commit(".github/workflows/release.yml", "1")
-        self.commit(".github/workflows/update-slang.yml", "1")
-        self.assertEqual(release_revision(self.repository), (4, workflow_commit))
+        self.assertEqual(release_revision(self.repository), (5, workflow_commit))
 
     def test_new_pin_resets_the_revision(self) -> None:
         self.commit("release.json", '{"slang_tag": "v2026.19"}')
@@ -154,6 +143,12 @@ class ReleaseRevisionTests(unittest.TestCase):
         self.commit("scripts/file.py", "2")
         pin_commit = self.commit("release.json", '{"slang_tag": "v2026.19"}')
         self.assertEqual(release_revision(self.repository), (5, pin_commit))
+
+    def test_tags_with_the_same_package_version_share_revisions(self) -> None:
+        self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        self.commit("scripts/file.py", "1")
+        pin_commit = self.commit("release.json", '{"slang_tag": "v2026.19.0"}')
+        self.assertEqual(release_revision(self.repository), (3, pin_commit))
 
     def test_rejects_a_shallow_clone(self) -> None:
         self.commit("release.json", '{"slang_tag": "v2026.19"}')

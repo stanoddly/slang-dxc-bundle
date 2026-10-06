@@ -12,6 +12,7 @@ on:
       - release.json
       - packaging/**
       - scripts/**
+      - tests/**
       - .github/workflows/release.yml
 
 permissions:

@@ -55,6 +55,10 @@ jobs:
         run: |
           branch="update-slang/$SLANG_TAG"
           if [[ "$(gh pr view "$branch" --json state --jq .state 2>/dev/null)" != "OPEN" ]]; then
+            # A branch left by an earlier failed run has no open PR and would reject the new commit.
+            if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+              git push origin --delete "$branch"
+            fi
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git switch --create "$branch"

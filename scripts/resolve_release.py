@@ -16,12 +16,10 @@ from toolchain_layout import PLATFORMS, package_ids
 GITHUB_API_URL = "https://api.github.com"
 NUGET_FLAT_CONTAINER_URL = "https://api.nuget.org/v3-flatcontainer"
 SLANG_REPOSITORY = "shader-slang/slang"
-# Versions up to this one are single all-platform packages under the SDK's ID; nuget.org versions are immutable, so they stay legacy.
-LAST_LEGACY_VERSION = "2026.18.0"
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 PIN_FILE = "release.json"
 # Changes under these paths change what a release contains or how it is verified; each one raises the revision. Mirrored by the push paths in release.yml.
-RELEASE_PATHS = (PIN_FILE, "packaging", "scripts", ".github/workflows/release.yml")
+RELEASE_PATHS = (PIN_FILE, "packaging", "scripts", "tests", ".github/workflows/release.yml")
 
 
 def request_json(url: str, token: str) -> dict:
@@ -80,18 +78,19 @@ def git(repository_root: Path, *arguments: str) -> str:
     return subprocess.run(["git", "-C", str(repository_root), *arguments], check=True, capture_output=True, text=True).stdout.strip()
 
 
-# Git height: commits touching the release paths since the pin first named the current Slang tag, counting that commit as 1; also returns the last such commit.
-# Counting from the first pin keeps revisions rising when the pin returns to an earlier tag, so a released version is never reused.
+# Git height: commits touching the release paths since the pin first named the current Slang version, counting that commit as 1; also returns the last such commit.
+# Counting from the first pin keeps revisions rising when the pin returns to an earlier version, so a released version is never reused.
+# Versions are compared after NuGet normalization because tags such as v2026.19 and v2026.19.0 produce the same package version.
 def release_revision(repository_root: Path = REPOSITORY_ROOT) -> tuple[int, str]:
     if git(repository_root, "rev-parse", "--is-shallow-repository") == "true":
         raise RuntimeError("The release revision needs the full history; check out with fetch-depth: 0")
 
-    def pinned_tag(commit: str) -> str:
-        return json.loads(git(repository_root, "show", f"{commit}:{PIN_FILE}"))["slang_tag"]
+    def pinned_version(commit: str) -> str:
+        return normalize_nuget_version(json.loads(git(repository_root, "show", f"{commit}:{PIN_FILE}"))["slang_tag"].removeprefix("v"))
 
-    slang_tag = pinned_tag("HEAD")
+    slang_version = pinned_version("HEAD")
     pin_commits = git(repository_root, "log", "--reverse", "--diff-filter=d", "--format=%H", "--", PIN_FILE).splitlines()
-    pin_commit = next(commit for commit in pin_commits if pinned_tag(commit) == slang_tag)
+    pin_commit = next(commit for commit in pin_commits if pinned_version(commit) == slang_version)
     release_commit = git(repository_root, "log", "-1", "--format=%H", "--", *RELEASE_PATHS)
     height = int(git(repository_root, "rev-list", "--count", f"{pin_commit}..{release_commit}", "--", *RELEASE_PATHS))
     return height + 1, release_commit
@@ -132,10 +131,6 @@ def nuget_version_key(version: str) -> tuple:
         components.append(0)
     # A prerelease sorts below its release; an empty marker ranks highest.
     return (tuple(components), prerelease == "", prerelease)
-
-
-def is_legacy_toolchain_version(version: str) -> bool:
-    return nuget_version_key(version) <= nuget_version_key(LAST_LEGACY_VERSION)
 
 
 def normalize_nuget_version(version: str) -> str:
@@ -219,20 +214,10 @@ def main() -> int:
 
     package_version = toolchain_package_version(slang_version, revision)
     package_full_version = f"{package_version}+{release_commit[:7]}"
-    toolchain_version_is_legacy = is_legacy_toolchain_version(package_version)
-    missing_packages = (
-        [] if toolchain_version_is_legacy else missing_toolchain_packages(package_version)
-    )
-    # A legacy version counts as handled whether or not it was ever published; the legacy layout is no longer built.
+    missing_packages = missing_toolchain_packages(package_version)
     toolchain_package_exists = not missing_packages
     should_build_bundle = not bundle_release_exists
     should_prepare_toolchain = not toolchain_package_exists
-    if toolchain_version_is_legacy:
-        print(
-            f"Toolchain package version {package_version} belongs to the legacy single-package layout, "
-            f"which is no longer built; the SDK layout starts after {LAST_LEGACY_VERSION}",
-            file=sys.stderr,
-        )
 
     write_output("should_build_bundle", str(should_build_bundle).lower())
     write_output("should_prepare_toolchain", str(should_prepare_toolchain).lower())
@@ -260,7 +245,6 @@ def main() -> int:
                 "revision": revision,
                 "release_commit": release_commit,
                 "missing_toolchain_packages": missing_packages,
-                "toolchain_version_is_legacy": toolchain_version_is_legacy,
                 "slang_tag": slang_tag,
                 "dxc_tag": dxc_tag,
                 "dxc_commit": dxc_commit,
