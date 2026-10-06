@@ -19,7 +19,16 @@ SLANG_REPOSITORY = "shader-slang/slang"
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 PIN_FILE = "release.json"
 # Changes under these paths change what a release contains or how it is verified; each one raises the revision. Mirrored by the push paths in release.yml.
-RELEASE_PATHS = (PIN_FILE, "packaging", "scripts", "tests", ".github/workflows/release.yml")
+# The unit tests and the pin updater are excluded because no release job reads them.
+RELEASE_PATHS = (
+    PIN_FILE,
+    "packaging",
+    "scripts",
+    "tests",
+    ".github/workflows/release.yml",
+    ":(exclude)tests/test_*.py",
+    ":(exclude)scripts/update_slang.py",
+)
 
 
 def request_json(url: str, token: str) -> dict:
@@ -73,6 +82,9 @@ def validate_slang_release(slang_release: dict) -> None:
     if missing_assets:
         raise RuntimeError(f"Slang release {slang_tag} is missing required assets: " + ", ".join(missing_assets))
 
+    # Raises before a tag without a package version is pinned; such a pin would fail every later release.
+    toolchain_package_version(slang_version, 1)
+
 
 def git(repository_root: Path, *arguments: str) -> str:
     return subprocess.run(["git", "-C", str(repository_root), *arguments], check=True, capture_output=True, text=True).stdout.strip()
@@ -80,13 +92,17 @@ def git(repository_root: Path, *arguments: str) -> str:
 
 # Git height: commits touching the release paths since the pin first named the current Slang version, counting that commit as 1; also returns the last such commit.
 # Counting from the first pin keeps revisions rising when the pin returns to an earlier version, so a released version is never reused.
-# Versions are compared after NuGet normalization because tags such as v2026.19 and v2026.19.0 produce the same package version.
+# Versions are compared as NuGet does: normalized and case-insensitive, because tags such as v2026.19 and v2026.19.0 produce the same package version.
 def release_revision(repository_root: Path = REPOSITORY_ROOT) -> tuple[int, str]:
     if git(repository_root, "rev-parse", "--is-shallow-repository") == "true":
         raise RuntimeError("The release revision needs the full history; check out with fetch-depth: 0")
 
-    def pinned_version(commit: str) -> str:
-        return normalize_nuget_version(json.loads(git(repository_root, "show", f"{commit}:{PIN_FILE}"))["slang_tag"].removeprefix("v"))
+    def pinned_version(commit: str) -> str | None:
+        slang_tag = json.loads(git(repository_root, "show", f"{commit}:{PIN_FILE}"))["slang_tag"]
+        try:
+            return normalize_nuget_version(slang_tag.removeprefix("v")).lower()
+        except RuntimeError:
+            return None
 
     slang_version = pinned_version("HEAD")
     pin_commits = git(repository_root, "log", "--reverse", "--diff-filter=d", "--format=%H", "--", PIN_FILE).splitlines()

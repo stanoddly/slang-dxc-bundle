@@ -18,7 +18,7 @@ The version can also live in `global.json`, in which case the project uses `<Sdk
 
 Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` in its `Sdk.props` and the matching `Sdk.targets` import.
 
-Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that.
+The three-part versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; every version with a fourth revision component uses the SDK layout.
 
 The platform package exposes three MSBuild properties to the project that restores it:
 

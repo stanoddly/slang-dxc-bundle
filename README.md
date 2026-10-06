@@ -45,7 +45,7 @@ Releases are tagged `slang-<Slang version>-dxc-<DXC version>-r<revision>` on the
 
 The version can also live in `global.json` under `msbuild-sdks`, and another MSBuild project SDK can pin it for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` (the `Version` attribute of `<Import>` expands properties; the `<Sdk>` element does not). A `PackageReference` to `SlangDxcBundle.Toolchain` fails the build with a migration message. Consumers that select the build host themselves, for example on a host the SDK does not detect, can reference a platform package directly.
 
-Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that. The legacy versions stay on nuget.org unchanged.
+The three-part versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; every version with a fourth revision component uses the SDK layout. The legacy versions stay on nuget.org unchanged.
 
 GitHub releases contain the full platform bundles; the slim tool trees are distributed only through the platform packages.
 
@@ -57,7 +57,7 @@ The package version is the NuGet-normalized Slang version followed by the releas
 
 ## Automation
 
-[`release.json`](release.json) pins the Slang release that this repository packages. The release revision is the number of commits that changed `release.json`, `packaging/`, `scripts/`, `tests/` or `release.yml` since `release.json` first pinned the current Slang version, counting that commit as 1. A new Slang release therefore starts at revision 1, and every later packaging change raises it, so each revision maps to one commit. If the pin returns to an earlier tag, its revisions continue above the ones already released. Both workflows act only when started from `main`.
+[`release.json`](release.json) pins the Slang release that this repository packages. The release revision is the number of commits that changed `release.json`, `packaging/`, `scripts/`, `tests/` or `release.yml` (except the Python unit tests and `scripts/update_slang.py`) since `release.json` first pinned the current Slang version, counting that commit as 1. A new Slang release therefore starts at revision 1, and every later packaging change raises it, so each revision maps to one commit. If the pin returns to an earlier tag, its revisions continue above the ones already released. Both workflows act only when started from `main`.
 
 [`update-slang.yml`](.github/workflows/update-slang.yml) checks the latest stable Slang release every six hours. When it is newer than the pin, the workflow opens a pull request that updates `release.json`, squash-merges it, and starts the release. It can also be started manually with a specific Slang tag, which may also move the pin backwards. A `repository_dispatch` event of type `slang-release` may provide the tag as `client_payload.slang_tag` for external webhook integrations. GitHub cannot subscribe directly to another repository's `release` event, so the scheduled check is the default trigger and may be delayed by GitHub Actions scheduling. The workflow needs "Allow GitHub Actions to create and approve pull requests" enabled in the repository settings.
 

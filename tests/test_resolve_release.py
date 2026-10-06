@@ -14,8 +14,9 @@ from resolve_release import (
     normalize_nuget_version,
     release_revision,
     toolchain_package_version,
+    validate_slang_release,
 )
-from toolchain_layout import package_ids
+from toolchain_layout import PLATFORMS, package_ids
 
 
 class NormalizeNuGetVersionTests(unittest.TestCase):
@@ -92,6 +93,26 @@ class ToolchainPackageVersionTests(unittest.TestCase):
             toolchain_package_version("2026.19.0.1", 1)
 
 
+class ValidateSlangReleaseTests(unittest.TestCase):
+    @staticmethod
+    def release(tag: str) -> dict:
+        version = tag.removeprefix("v")
+        return {"tag_name": tag, "draft": False, "assets": [{"name": f"slang-{version}-{platform}.zip"} for platform in PLATFORMS]}
+
+    def test_accepts_a_complete_release(self) -> None:
+        validate_slang_release(self.release("v2026.19"))
+
+    def test_rejects_a_tag_without_a_package_version(self) -> None:
+        with self.assertRaises(RuntimeError):
+            validate_slang_release(self.release("v2026.20.1.2.3"))
+
+    def test_rejects_a_missing_asset(self) -> None:
+        release = self.release("v2026.19")
+        release["assets"].pop()
+        with self.assertRaises(RuntimeError):
+            validate_slang_release(release)
+
+
 class ReleaseRevisionTests(unittest.TestCase):
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -149,6 +170,24 @@ class ReleaseRevisionTests(unittest.TestCase):
         self.commit("scripts/file.py", "1")
         pin_commit = self.commit("release.json", '{"slang_tag": "v2026.19.0"}')
         self.assertEqual(release_revision(self.repository), (3, pin_commit))
+
+    def test_ignores_files_no_release_job_reads(self) -> None:
+        pin_commit = self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        self.commit("tests/test_resolve_release.py", "1")
+        self.commit("scripts/update_slang.py", "1")
+        self.assertEqual(release_revision(self.repository), (1, pin_commit))
+
+    def test_prerelease_labels_match_case_insensitively(self) -> None:
+        self.commit("release.json", '{"slang_tag": "v2026.20-RC.1"}')
+        self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        pin_commit = self.commit("release.json", '{"slang_tag": "v2026.20-rc.1"}')
+        self.assertEqual(release_revision(self.repository), (3, pin_commit))
+
+    def test_skips_an_earlier_pin_without_a_package_version(self) -> None:
+        self.commit("release.json", '{"slang_tag": "v2026.19"}')
+        self.commit("release.json", '{"slang_tag": "v2026.20.1.2.3"}')
+        pin_commit = self.commit("release.json", '{"slang_tag": "v2026.21"}')
+        self.assertEqual(release_revision(self.repository), (1, pin_commit))
 
     def test_rejects_a_shallow_clone(self) -> None:
         self.commit("release.json", '{"slang_tag": "v2026.19"}')
