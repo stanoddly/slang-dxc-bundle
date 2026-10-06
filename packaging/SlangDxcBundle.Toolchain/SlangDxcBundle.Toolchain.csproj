@@ -33,10 +33,13 @@
         <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
     </ItemGroup>
 
-    <!-- The SDK pins the platform packages to its own version, which only the pack knows. -->
+    <!-- The SDK pins the platform packages to its own version, which only the pack knows. Build metadata is dropped: it plays no part in NuGet version identity, and consumers copy this value into <Sdk Version>. -->
     <Target Name="GenerateToolchainVersionProps" BeforeTargets="_GetPackageFiles">
+        <PropertyGroup>
+            <_ToolchainPinnedVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(PackageVersion)', '\+.*$', ''))</_ToolchainPinnedVersion>
+        </PropertyGroup>
         <WriteLinesToFile File="$(ToolchainVersionProps)"
-                          Lines="&lt;Project&gt;;  &lt;PropertyGroup&gt;;    &lt;SlangDxcToolchainVersion&gt;$(PackageVersion)&lt;/SlangDxcToolchainVersion&gt;;  &lt;/PropertyGroup&gt;;&lt;/Project&gt;"
+                          Lines="&lt;Project&gt;;  &lt;PropertyGroup&gt;;    &lt;SlangDxcToolchainVersion&gt;$(_ToolchainPinnedVersion)&lt;/SlangDxcToolchainVersion&gt;;  &lt;/PropertyGroup&gt;;&lt;/Project&gt;"
                           Overwrite="true"
                           WriteOnlyWhenDifferent="true" />
     </Target>
