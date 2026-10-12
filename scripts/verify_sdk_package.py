@@ -58,9 +58,11 @@ def main() -> int:
             raise RuntimeError("Package contains unexpected files: " + ", ".join(unexpected_files))
 
         version_props = package.read(version_props_entry).decode("utf-8")
-        expected_version_text = f"<SlangDxcToolchainVersion>{arguments.package_version}</SlangDxcToolchainVersion>"
+        # The pin feeds version ranges and <Sdk Version>, so it carries no build metadata.
+        pinned_version = arguments.package_version.partition("+")[0]
+        expected_version_text = f"<SlangDxcToolchainVersion>{pinned_version}</SlangDxcToolchainVersion>"
         if expected_version_text not in version_props:
-            raise RuntimeError(f"Version props do not pin {arguments.package_version}")
+            raise RuntimeError(f"Version props do not pin {pinned_version}")
 
         sdk_props = package.read("Sdk/Sdk.props").decode("utf-8")
         for required_text in (

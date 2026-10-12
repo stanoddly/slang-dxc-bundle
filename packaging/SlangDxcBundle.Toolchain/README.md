@@ -18,7 +18,7 @@ The version can also live in `global.json`, in which case the project uses `<Sdk
 
 Another MSBuild project SDK can pin the toolchain for its own consumers with `<Import Project="Sdk.props" Sdk="SlangDxcBundle.Toolchain" Version="x.y.z" />` in its `Sdk.props` and the matching `Sdk.targets` import.
 
-Versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; the SDK layout starts with the first Slang release after that.
+The three-part versions up to and including `2026.18.0` are legacy single packages that contain all five platforms and are referenced with `PackageReference`; every version with a fourth revision component uses the SDK layout.
 
 The platform package exposes three MSBuild properties to the project that restores it:
 
@@ -32,6 +32,6 @@ The platform package reference is private to the project that uses the SDK; it n
 
 A `PackageReference` to this package fails the build with a migration message; the SDK must be referenced through the `<Sdk>` element or `global.json`. MSBuild resolves a named SDK once per build, so all projects in one build share the first resolved toolchain version.
 
-Package versions match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. Exact DXC versions, source revisions, and binary digests are recorded in each platform package's `SLANG-DXC-BUNDLE.json`.
+Package versions are the NuGet-normalized Slang version followed by a packaging revision, so Slang `2026.19` at revision 1 becomes package version `2026.19.0.1`. The build metadata after `+` is the source commit of this repository. Exact DXC versions, source revisions, and binary digests are recorded in each platform package's `SLANG-DXC-BUNDLE.json`.
 
 The packaging integration is MIT-licensed. The bundled binaries retain their upstream licenses and notices within every platform package.

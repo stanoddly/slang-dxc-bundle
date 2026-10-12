@@ -18,6 +18,6 @@ Most consumers should not reference this package directly. The [SlangDxcBundle.T
 
 A direct `PackageReference` is supported for consumers that select the build host themselves. The package does not run any tools and does not depend on the application's target runtime.
 
-Package versions match their Slang version after NuGet normalization, so a two-component Slang version such as `2026.14` becomes package version `2026.14.0`. Exact DXC versions, source revisions, and binary digests are recorded in `SLANG-DXC-BUNDLE.json`.
+Package versions are the NuGet-normalized Slang version followed by a packaging revision, so Slang `2026.19` at revision 1 becomes package version `2026.19.0.1`. The build metadata after `+` is the source commit of this repository. Exact DXC versions, source revisions, and binary digests are recorded in `SLANG-DXC-BUNDLE.json`.
 
 The packaging integration is MIT-licensed. The bundled binaries retain their upstream licenses and notices within the platform directory.
